@@ -26,3 +26,6 @@ Temporary Items
 
 # Data 
 data/*.emd
+data/*.npz
+data/*/*.emd
+data/*/*.npz
