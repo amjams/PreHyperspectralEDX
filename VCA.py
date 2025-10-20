@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# modules
 import sys
 import numpy as sp
 import scipy.linalg as splin
