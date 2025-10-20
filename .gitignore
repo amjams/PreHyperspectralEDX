@@ -26,6 +26,7 @@ Temporary Items
 
 # other directories
 .ipynb_checkpoints
+.virtual_documents
 
 # Data 
 data/*.emd
