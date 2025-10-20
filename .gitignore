@@ -24,6 +24,9 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# other directories
+.ipynb_checkpoints
+
 # Data 
 data/*.emd
 data/*.npz
