@@ -1,39 +1,106 @@
 import numpy as np
 from sklearn.decomposition import PCA
 import sys
-import time
-from ipywidgets import interactive
 import matplotlib.pyplot as plt
 from scipy.optimize import nnls 
-from scipy.stats import zscore
-from datetime import datetime
-import seaborn as sns
-from skimage.feature import peak_local_max
 from matplotlib import cm
 import cv2 as cv
-from sklearn.preprocessing import MinMaxScaler
-from VCA import *
 import os
 from scipy import signal
 import math
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy.spatial import ConvexHull
-from scipy.io import savemat,loadmat
-from matplotlib.gridspec import GridSpec
-from ipywidgets import interact, widgets, Button, Output
-import pacmap
-from annoy import AnnoyIndex
-import glob
+
+
+############# EMD loading #############
+def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame = True): 
+    """wrapper for loading EMD data from hyperspy
+    
+    Returns
+    -------
+    The EDX dataset, the EM image (HAADF), and the xray_energies (energy values at the bins)
+    """
+    s = hs.load(file_path,
+                SI_dtype='uint8',
+                first_frame=1,
+                last_frame=last_frame,
+                sum_frames=sum_frames,
+                select_type = None,
+                load_SI_image_stack = True)    
+    # search 
+    for i in range(len(s)):
+        if '2048, 2048' in repr(s[i]) and 'EDSTEMSpectrum' in repr(s[i]):   
+            spectrum_idx = i
+        elif 'HAADF' in repr(s[i]): 
+            haadf_idx = i
+        if haadf_last_frame:
+            haadf = s[haadf_idx].data[-1,:,:]
+        else:
+            haadf = s[haadf_idx].data[:,:,:]
+            
+    # assign    
+    EDX_spectrum = s[spectrum_idx].data   
+    xray_energies = s[spectrum_idx].axes_manager.signal_axes[0].axis
+
+    return EDX_spectrum, haadf, xray_energies
+
+class EM_EDX:
+        """
+    A class used to a tile of co-registered HAADF and EDX.
+
+    ...
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+
+    """
+
+    def __init__(self, ):
 
 
 
-def reconstruct_manual(X,pca,which_components):
-    comps = pca.components_
-    mu = pca.mean_
-    X_transformed = pca.transform(X)
-    return np.dot(X_transformed[:,which_components],comps[which_components,:])+mu
+############# Evaluation #############
+def compute_inner_outer_similarity_with_distances(dist_to_ref, labels):
+    # Initialize lists to store inner-class similarities and outer-class dissimilarities
+    inner_class_similarities = []
+    outer_class_dissimilarities = []
+    
+    # Get unique labels
+    unique_labels = np.unique(labels)
+    
+    # Compute inner-class similarity and outer-class dissimilarity for each cluster
+    for label in unique_labels:
+        # Get indices of data points belonging to the current cluster
+        cluster_indices = np.where(labels == label)[0]
+        
+        # Get distances from the reference for data points in the current cluster
+        cluster_distances = dist_to_ref[cluster_indices]
+        
+        # Compute average distance within the cluster
+        intra_cluster_distances = np.mean(np.abs(np.subtract.outer(cluster_distances, cluster_distances)))
+        inner_class_similarities.append(intra_cluster_distances)
+        
+        # Get distances from the reference for data points in other clusters
+        other_cluster_indices = np.where(labels != label)[0]
+        other_cluster_distances = dist_to_ref[other_cluster_indices]
+        
+        # Compute average distance to points in other clusters
+        inter_cluster_distances = np.mean(np.abs(np.subtract.outer(cluster_distances, other_cluster_distances)))
+        outer_class_dissimilarities.append(inter_cluster_distances)
+    
+    # Compute the ratio of inner-class similarity to outer-class dissimilarity
+    similarity_dissimilarity_ratio = np.mean(inner_class_similarities) / np.mean(outer_class_dissimilarities)
+    
+    return similarity_dissimilarity_ratio
+
+# Euclidean distance
+def euc(array1, array2):
+    return np.sqrt(np.sum((array1 - array2)**2))
 
 
+
+############# Basic filtering and preprocessing #############
 def GaussFilter(im,apply=True,sigma = 2, size=3):
     if apply:
         kernel = np.ones((size,size),np.float32)/(size*size)
@@ -95,34 +162,10 @@ def rebin_spectrumXY(spectrum,bins=1024):
     spectrum = np.mean(spectrum,axis=-2)
     return spectrum.mean(axis=1)
 
-#def rebin_spectrumXY(spectrum,bins=1024):    # Too slow!
-#    x,y,z = spectrum.shape
-#    new_spectrum = np.zeros((bins, bins, z))
-#    for k in range(z):
-#        new_spectrum[:,:,k] = rebin_XY(spectrum[:,:,k])
-#        print(k)
-#    return new_spectrum
-
 def rebin_energies(energies, bins):
     z = energies.shape[0]
     energies = energies.reshape((bins, int(z/bins))).mean(axis=1)
     return energies
-
-def clahe(img, clipLimit=2.0, tileGridSize=(8,8)):
-    img = img.astype('uint8')
-    lab= cv.cvtColor(img, cv.COLOR_BGR2LAB)
-    l_channel, a, b = cv.split(lab)
-
-    # Applying CLAHE to L-channel
-    # feel free to try different values for the limit and grid size:
-    clahe = cv.createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
-    cl = clahe.apply(l_channel)
-
-    # merge the CLAHE enhanced L-channel with the a and b channel
-    limg = cv.merge((cl,a,b))
-
-    # Converting image from LAB Color model to BGR color spcae
-    return cv.cvtColor(limg, cv.COLOR_LAB2BGR)
 
 def MinMaxHSI(spectrum_2D):
     for j in range(spectrum_2D.shape[1]):
@@ -132,7 +175,14 @@ def MinMaxHSI(spectrum_2D):
 def NormalizeData(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
+def reconstruct_manual(X,pca,which_components):
+    comps = pca.components_
+    mu = pca.mean_
+    X_transformed = pca.transform(X)
+    return np.dot(X_transformed[:,which_components],comps[which_components,:])+mu
 
+
+############# OME-ZARR related #############
 def make_ome_rgb(spectrum_rgb,outpath,lvl=4,downsample_factor=2,pixel_size=2.5,tile_size=32,ch_type='PC'):
     with tif.TiffWriter(outpath, bigtiff=True) as tf:
         data = spectrum_rgb
@@ -210,18 +260,6 @@ def normalize88(I,normalizer=None):
     I = ((I - mn)/mx) * 255
     return I.astype(np.uint8),mn,mx
 
-
-# NNLS to FCLS
-def nnls2fcls(End_maps):
-    EM,x,y,files = End_maps.shape
-    for i in range(x):
-        for j in range(y):
-            for f in range(files):
-                End_maps[:,i,j,f] = End_maps[:,i,j,f]/np.sum(End_maps[:,i,j,f])
-    return End_maps
-
-def nnls_maxcf(End_maps):
-    return End_maps/End_maps.max()
 
 
 def mosaic_edx(main_folder='/data/p276451/EDX/',rows=[0,2],cols=[0,2],base_dims=[1024,1024,256],hash_sample=None,crop_neg=96):
@@ -419,25 +457,6 @@ def SAD(s1, s2):   # find the source later
     return angle
 
 
-def spectrum_dog(spectrum_extended,originalzdim = 250):   # not used recently, but maybe useful
-    xdim = spectrum_extended.shape[0]
-    ydim = spectrum_extended.shape[1]
-    zdim = spectrum_extended.shape[2]
-
-    # the number of radii
-    radii_num = int(zdim/originalzdim)
-
-    # initialize the dog 
-    spectrum_dog = np.zeros((xdim,ydim,zdim-originalzdim))
-
-    for idx in range(radii_num-1):
-        idx1 = idx+1
-        innerGauss = spectrum_extended[:,:,originalzdim*idx:(originalzdim*idx)+originalzdim]
-        outerGauss = spectrum_extended[:,:,originalzdim*idx1:(originalzdim*idx1)+originalzdim]
-        spectrum_dog[:,:,originalzdim*idx:(originalzdim*idx)+originalzdim] = outerGauss - innerGauss 
-
-    return spectrum_dog
-
 
 def pad_spectrum(spectrum,pad_width=10,mode='mean'):
     # x and y dimensions
@@ -520,62 +539,13 @@ def sparsity(spectrum):
 
 
 
-def vca_purity_mask(spectrum_2D,nEM=10,special=False):
-    n = spectrum_2D.shape[0]
-    end_members_vca,_,_ = vca(spectrum_2D[:,:].transpose(),nEM,verbose = True)
-    Ends = np.array([nnls(end_members_vca,i)[0] for i in spectrum_2D])
-    best_fit_endmemebr = np.argmax(Ends,axis=1)
-    sam_to_best_endmember = np.zeros(best_fit_endmemebr.shape)
-    for i in range(n):
-        sam_to_best_endmember[i] = SAD(spectrum_2D[i,:],end_members_vca[:,best_fit_endmemebr[i]])
-    sam_to_best_endmember = (sam_to_best_endmember - sam_to_best_endmember.min())/(sam_to_best_endmember.max()-sam_to_best_endmember.min())
-    if special:
-        sam_to_best_endmember = np.abs((sam_to_best_endmember - 0.5))*2
-    return sam_to_best_endmember 
-
-
-#### for frame count analysis
-
-def compute_inner_outer_similarity_with_distances(dist_to_ref, labels):
-    # Initialize lists to store inner-class similarities and outer-class dissimilarities
-    inner_class_similarities = []
-    outer_class_dissimilarities = []
-    
-    # Get unique labels
-    unique_labels = np.unique(labels)
-    
-    # Compute inner-class similarity and outer-class dissimilarity for each cluster
-    for label in unique_labels:
-        # Get indices of data points belonging to the current cluster
-        cluster_indices = np.where(labels == label)[0]
-        
-        # Get distances from the reference for data points in the current cluster
-        cluster_distances = dist_to_ref[cluster_indices]
-        
-        # Compute average distance within the cluster
-        intra_cluster_distances = np.mean(np.abs(np.subtract.outer(cluster_distances, cluster_distances)))
-        inner_class_similarities.append(intra_cluster_distances)
-        
-        # Get distances from the reference for data points in other clusters
-        other_cluster_indices = np.where(labels != label)[0]
-        other_cluster_distances = dist_to_ref[other_cluster_indices]
-        
-        # Compute average distance to points in other clusters
-        inter_cluster_distances = np.mean(np.abs(np.subtract.outer(cluster_distances, other_cluster_distances)))
-        outer_class_dissimilarities.append(inter_cluster_distances)
-    
-    # Compute the ratio of inner-class similarity to outer-class dissimilarity
-    similarity_dissimilarity_ratio = np.mean(inner_class_similarities) / np.mean(outer_class_dissimilarities)
-    
-    return similarity_dissimilarity_ratio
-
-# Euclidean distance
-def euc(array1, array2):
-    return np.sqrt(np.sum((array1 - array2)**2))
 
 
 
-################# for SAM ###############################
+
+
+
+############# Segment Anything #############
 def show_anns(anns,display=False,area_thresh=1024**2):
     if len(anns) == 0:
         return
