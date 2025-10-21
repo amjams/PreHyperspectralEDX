@@ -8,15 +8,22 @@ import cv2 as cv
 import os
 from scipy import signal
 import math
+import hyperspy.api as hs
+import copy
 
 
 ############# EMD loading #############
 def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame = True): 
     """wrapper for loading EMD data from hyperspy
+    Parameters
+    ----------
+    see hyperspy's load
     
     Returns
     -------
-    The EDX dataset, the EM image (HAADF), and the xray_energies (energy values at the bins)
+    EDX: array, EDX dataset dimensions (h,w,b)
+    HAADF: array dimension (h,w)
+    xray_energies: array (b,)
     """
     s = hs.load(file_path,
                 SI_dtype='uint8',
@@ -28,35 +35,19 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
     # search 
     for i in range(len(s)):
         if '2048, 2048' in repr(s[i]) and 'EDSTEMSpectrum' in repr(s[i]):   
-            spectrum_idx = i
+            EDX_idx = i
         elif 'HAADF' in repr(s[i]): 
             haadf_idx = i
-        if haadf_last_frame:
-            haadf = s[haadf_idx].data[-1,:,:]
-        else:
-            haadf = s[haadf_idx].data[:,:,:]
+            if haadf_last_frame:
+                haadf = s[haadf_idx].data[-1,:,:]
+            else:
+                haadf = s[haadf_idx].data[:,:,:]
             
     # assign    
-    EDX_spectrum = s[spectrum_idx].data   
-    xray_energies = s[spectrum_idx].axes_manager.signal_axes[0].axis
+    EDX = s[EDX_idx].data   
+    xray_energies = s[EDX_idx].axes_manager.signal_axes[0].axis
 
-    return EDX_spectrum, haadf, xray_energies
-
-class EM_EDX:
-        """
-    A class used to a tile of co-registered HAADF and EDX.
-
-    ...
-
-    Attributes
-    ----------
-
-    Methods
-    -------
-
-    """
-
-    def __init__(self, ):
+    return EDX, haadf, xray_energies
 
 
 
