@@ -12,7 +12,6 @@ import hyperspy.api as hs
 import copy
 
 
-############# EMD loading #############
 def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame = True): 
     """wrapper for loading EMD data from hyperspy
     Parameters
@@ -51,8 +50,16 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
 
 
 
-############# Evaluation #############
 def compute_inner_outer_similarity_with_distances(dist_to_ref, labels):
+    """ Evaluation
+
+    
+    Returns
+    -------
+    EDX: array, EDX dataset dimensions (h,w,b)
+    HAADF: array dimension (h,w)
+    xray_energies: array (b,)
+    """
     # Initialize lists to store inner-class similarities and outer-class dissimilarities
     inner_class_similarities = []
     outer_class_dissimilarities = []
@@ -84,6 +91,7 @@ def compute_inner_outer_similarity_with_distances(dist_to_ref, labels):
     similarity_dissimilarity_ratio = np.mean(inner_class_similarities) / np.mean(outer_class_dissimilarities)
     
     return similarity_dissimilarity_ratio
+
 
 # Euclidean distance
 def euc(array1, array2):
