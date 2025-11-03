@@ -99,80 +99,10 @@ def euc(array1, array2):
 
 
 
-############# Basic filtering and preprocessing #############
-def GaussFilter(im,apply=True,sigma = 2, size=3):
-    if apply:
-        kernel = np.ones((size,size),np.float32)/(size*size)
-        im_filtered = cv.GaussianBlur(im,(size,size),sigmaX = sigma, sigmaY= sigma, borderType =cv.BORDER_DEFAULT)
-    else:
-        im_filtered= im
-    return im_filtered
-
-def MeanFilter(im,apply=True,size=3):
-    if apply:
-        kernel = np.ones((size,size),np.float32)/(size*size)
-        im_filtered = cv.filter2D(im,-1,kernel) 
-    else:
-        im_filtered= im
-    return im_filtered
-
-def GaussFilterCube(spectrum, sigma = 2, size=3):
-    spectrum_filtered = np.zeros(spectrum.shape)
-    for i in range(spectrum.shape[2]): 
-        spectrum_filtered[:,:,i] = GaussFilter(spectrum[:,:,i],apply=True,sigma=sigma,size=size)
-    return spectrum_filtered
-
-def MeanFilterCube(spectrum, sigma = 2, size=3):
-    spectrum_filtered = np.zeros(spectrum.shape)
-    for i in range(spectrum.shape[2]): 
-        spectrum_filtered[:,:,i] = MeanFilter(spectrum[:,:,i],apply=True,size=size)
-    return spectrum_filtered
 
 
-def discrete_matshow(data,cmap='RdBu'):
-    # get discrete colormap
-    cmap = plt.get_cmap(cmap, np.max(data) - np.min(data) + 1)
-    # set limits .5 outside true range
-    mat = plt.matshow(data, cmap=cmap, vmin=np.min(data) - 0.5, 
-                      vmax=np.max(data) + 0.5)
-    # tell the colorbar to tick at integers
-    cax = plt.colorbar(mat, ticks=np.arange(np.min(data), np.max(data) + 1))
 
-def median_blur(im_in,size=0):
-    if size==0:
-        im_out = im_in
-    else: 
-        im_out = cv.medianBlur(np.uint8(im_in),size)
-    return im_out
 
-def rebin_spectrum(spectrum,bins=1024):
-    x,y,z = spectrum.shape
-    spectrum = np.reshape(spectrum,(x,y,bins,int(z/bins)))
-    return np.sum(spectrum,axis=-1)
-
-def rebin_XY(img,bins=1024):
-    x,y = img.shape
-    img= np.reshape(img,(bins,int(x/bins),bins,int(y/bins)))
-    return img.mean(axis=-1).mean(axis=1)
-
-def rebin_spectrumXY(spectrum,bins=1024):
-    x,y,z = spectrum.shape
-    spectrum = np.reshape(spectrum,(bins,int(x/bins),bins,int(y/bins),z))
-    spectrum = np.mean(spectrum,axis=-2)
-    return spectrum.mean(axis=1)
-
-def rebin_energies(energies, bins):
-    z = energies.shape[0]
-    energies = energies.reshape((bins, int(z/bins))).mean(axis=1)
-    return energies
-
-def MinMaxHSI(spectrum_2D):
-    for j in range(spectrum_2D.shape[1]):
-        spectrum_2D[:,j] = NormalizeData(spectrum_2D[:,j])
-    return spectrum_2D
-
-def NormalizeData(data):
-    return (data - np.min(data)) / (np.max(data) - np.min(data))
 
 def reconstruct_manual(X,pca,which_components):
     comps = pca.components_

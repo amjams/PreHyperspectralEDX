@@ -4,7 +4,7 @@
 """
 
 # Authors: Ahmad Alsahaf
-
+import sys, os
 import numpy as np
 from sklearn.decomposition import PCA
 import sys
@@ -40,6 +40,11 @@ class EM_EDX:
     @property
     def EDX_dim(self):
         return self.EDX.shape
+    
+    @property
+    def EDX_2D(self):
+        h,w,b = self.EDX_dim
+        return self.EDX.reshape((h*w,b))
 
     def log_step(self, operation, parameters=None, notes=None):
         """Log a preprocessing step."""
@@ -129,7 +134,90 @@ class EM_EDX:
         return self
 
 
-    # Summarize the processing history in a pandas dataframe
+    def binning(self, dim = None):
+        """
+        Jointly bin the HAADF, EDX, and xray_energies arrays.
+        according to the given new dimensions.
+        
+        Parameters
+        ----------
+        dim : tuple of ints, specifying the new x,y,b dimensions.
+            A tuple specifying the crop region.
+        """
+        if dim is None:
+            return self
+
+        if len(dim) != 3:
+            raise ValueError('dim must be a 3-tuple: x,y,b new dimensions.')    
+            
+        if any(self.EDX_dim[i] % dim[i] != 0 for i in range(3)):
+            raise ValueError("Ensure old dims are divisible by new dims.")
+            
+        
+        # original and new dimensions
+        old_y, old_x, old_b = self.EDX_dim
+        new_y, new_x, new_b = dim
+    
+        # binning factors
+        fy, fx, fb = old_y // new_y, old_x // new_x, old_b // new_b
+    
+        # HAADF 
+        self.haadf = self.haadf.reshape(new_y, fy, new_x, fx)
+        self.haadf = self.haadf.mean(axis=(1, 3))
+    
+        # EDX 
+        self.EDX = self.EDX.reshape(new_y, fy, new_x, fx, new_b, fb)
+        self.EDX = self.EDX.mean(axis=(1, 3, 5))
+    
+        # xray energies 
+        self.xray_energies = self.xray_energies.reshape(new_b, fb)
+        self.xray_energies = self.xray_energies.mean(axis=-1)
+            
+        return self
+
+    def MeanFilterEDX(self,kernel_size=3):
+        """
+        Apply a mean filter per band on the EDX cube
+        
+        Parameters
+        ----------
+        kernel_size: size (width/height) of the kernel
+        """
+
+        # apply a mean filter per band
+        for k in range(self.EDX_dim[2]):
+            self.EDX[:,:,k] = mean_filter(self.EDX[:,:,k],kernel_size=kernel_size)
+            
+        return self
+
+    def MinMaxEDX(self, bandwise = False):
+        """
+        min-max normalize the EDX datacube.
+        
+        Parameters
+        ----------
+        bandwise: if True, normalize per band.
+        """
+
+        b = self.EDX_dim[2]
+
+        if bandwise:
+            for k in range(b):
+                self.EDX[:,:,k] = MinMax(self.EDX[:,:,k])
+        else:
+            self.EDX = MinMax(self.EDX)
+            
+        return self
+
+    def FalseColor(self,bands=[4,25,28]):
+        ## return a false color of three selected bands
+        r = Normalize_uint8(self.EDX[:,:,bands[0]])
+        g = Normalize_uint8(self.EDX[:,:,bands[1]])
+        b = Normalize_uint8(self.EDX[:,:,bands[2]])
+        
+        return cv.merge([r,g,b])
+
+
     def summary(self):
         """Return a pandas DataFrame summarizing the preprocessing history."""
         if not self.processing_history:
@@ -147,3 +235,38 @@ class EM_EDX:
         return f"<EM_EDX | {len(self.processing_history)} steps logged>"
 
 
+
+def mean_filter(img, kernel_size=3):
+    """ Apply a mean filter to an image. 
+
+        Parameters
+        ----------
+        kernel_size: size (width/height) of the kernel
+    """
+    kernel = np.ones((kernel_size,kernel_size),np.float32)/(kernel_size*kernel_size)
+    return cv.filter2D(img,-1,kernel) 
+
+
+
+def MinMax(data):
+    # minmax the data (0-1 normalize)
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+
+def Normalize_uint8(img, normalize_by=None):
+    """Normalize an image then set to uint8.
+
+    Parameters
+    ----------
+    normalize_by : optional
+        Another array to normalize by.
+    """
+    if normalize_by is None:
+        mn = img.min()
+        mx = img.max()
+    else:
+        mn = normalize_by.min()
+        mx = normalize_by.max()
+
+    img_out = ((img-mn) / (mx-mn)) * 255
+    return img_out.astype(np.uint8)
