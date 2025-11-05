@@ -270,3 +270,34 @@ def Normalize_uint8(img, normalize_by=None):
 
     img_out = ((img-mn) / (mx-mn)) * 255
     return img_out.astype(np.uint8)
+
+
+def SAD(s1, s2, eps=1e-12):
+    """
+    Computes the spectral angle mapper (SAD) between two spectra or arrays of spectra.
+
+    Parameters
+    ----------
+    s1 : np.ndarray
+        First spectrum or array (..., bands)
+    s2 : np.ndarray
+        Second spectrum or array (..., bands)
+    eps : float, optional
+        Small constant to avoid division by zero (default 1e-12)
+
+    Returns
+    -------
+    angle : np.ndarray or float
+        Spectral angle(s) in radians.
+    """
+    s1 = np.asarray(s1, dtype=float)
+    s2 = np.asarray(s2, dtype=float)
+
+    dot = np.sum(s1 * s2, axis=-1)
+    norm1 = np.linalg.norm(s1, axis=-1)
+    norm2 = np.linalg.norm(s2, axis=-1)
+
+    cos_theta = dot / (norm1 * norm2 + eps)
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+
+    return np.arccos(cos_theta)

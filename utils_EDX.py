@@ -12,7 +12,7 @@ import hyperspy.api as hs
 import copy
 
 
-def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame = True): 
+def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame=True): 
     """wrapper for loading EMD data from hyperspy
     Parameters
     ----------
@@ -26,10 +26,10 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
     """
     s = hs.load(file_path,
                 SI_dtype='uint8',
-                first_frame=1,
+                first_frame=first_frame,
                 last_frame=last_frame,
                 sum_frames=sum_frames,
-                select_type = None,
+                select_type = select_type,
                 load_SI_image_stack = True)    
     # search 
     for i in range(len(s)):
@@ -37,10 +37,14 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
             EDX_idx = i
         elif 'HAADF' in repr(s[i]): 
             haadf_idx = i
-            if haadf_last_frame:
+            if haadf_last_frame is True:
                 haadf = s[haadf_idx].data[-1,:,:]
-            else:
+            elif haadf_last_frame is False:
                 haadf = s[haadf_idx].data[:,:,:]
+            elif isinstance(haadf_last_frame, int) is True:
+                haadf = s[haadf_idx].data[haadf_last_frame,:,:]
+            else:
+                raise ValueError(f"Invalid haadf_last_frame value: {haadf_last_frame}")
             
     # assign    
     EDX = s[EDX_idx].data   
@@ -56,9 +60,7 @@ def compute_inner_outer_similarity_with_distances(dist_to_ref, labels):
     
     Returns
     -------
-    EDX: array, EDX dataset dimensions (h,w,b)
-    HAADF: array dimension (h,w)
-    xray_energies: array (b,)
+ 
     """
     # Initialize lists to store inner-class similarities and outer-class dissimilarities
     inner_class_similarities = []
@@ -97,18 +99,6 @@ def compute_inner_outer_similarity_with_distances(dist_to_ref, labels):
 def euc(array1, array2):
     return np.sqrt(np.sum((array1 - array2)**2))
 
-
-
-
-
-
-
-
-def reconstruct_manual(X,pca,which_components):
-    comps = pca.components_
-    mu = pca.mean_
-    X_transformed = pca.transform(X)
-    return np.dot(X_transformed[:,which_components],comps[which_components,:])+mu
 
 
 ############# OME-ZARR related #############
@@ -160,34 +150,6 @@ def make_ome(haadf, spectrum_reduced,outpath,lvl=4,downsample_factor=2,pixel_siz
         for i in range(lvl):
             idx = downsample_factor**(i+1)
             tf.write(image2[:,::idx, ::idx], subfiletype=1, **options)
-
-
-def normalize8(I,normalize_by=None):
-  if normalize_by is None:  
-    mn = I.min()
-    mx = I.max()
-  else:
-    mn = normalize_by.min()
-    mx = normalize_by.max()
-
-  mx -= mn
-  I = ((I - mn)/mx) * 255
-  return I.astype(np.uint8)
-
-# use this one if you want to normalize by another array
-def normalize88(I,normalizer=None):
-    if normalizer is None:  
-        mn = I.min()
-        mx = I.max()
-        #print(mx)
-    else:
-        mn = normalizer.min()
-        mx = normalizer.max()
-        #print(mx)
-
-    mx -= mn
-    I = ((I - mn)/mx) * 255
-    return I.astype(np.uint8),mn,mx
 
 
 
@@ -321,46 +283,8 @@ def gaussian_kernel(n, std, normalised=False):
 
 
 
-def spectrum_plus(spectrum,radii=[1],sigma=1):
-    # x and y dimensions
-    xdim = spectrum.shape[0]
-    ydim = spectrum.shape[1]
-    zdim = spectrum.shape[2]
-    
-    # determine the largest radius
-    maxr = np.max(np.asarray(radii))
-    
-    # initialize an array to the save the new features
-    spectrum_extended = np.zeros((xdim,ydim,zdim*len(radii)))
-    
-    for idx,r in enumerate(radii):
-        spectrum_extended[:,:,zdim*idx:(zdim*idx)+zdim] = GaussFilterCube(spectrum,size=r*2+1,sigma=2)
-        
-        #for i in range(maxr,spectrum.shape[0]-maxr):
-        #    for j in range(maxr,spectrum.shape[1]-maxr):
-        #        #spectrum_extended[i,j,zdim*idx:(zdim*idx)+zdim] = np.mean(spectrum[i-r:i,j-r:j,:],axis=(0,1))
-        #        #spectrum_extended[i,j,zdim*idx:(zdim*idx)+zdim] = np.mean(spectrum[i-r:i+r,j-r:j+r,:],axis=(0,1))
-        #     
-        #        w = np.repeat(gaussian_kernel(2*r+1,std=sigma)[:, :, np.newaxis],zdim, axis=2)
-        #        spectrum_extended[i,j,zdim*idx:(zdim*idx)+zdim] = np.average(spectrum[i-r:i+r+1,j-r:j+r+1,:],axis=(0,1),weights=w)
-    
-    return spectrum_extended
 
-
-
-def pad_spectrum(spectrum,pad_width=10):
-    # x and y dimensions
-    xdim = spectrum.shape[0]
-    ydim = spectrum.shape[1]
-    zdim = spectrum.shape[2]
-    
-    spectrum_padded = np.zeros((xdim+2*pad_width,ydim+2*pad_width,zdim))
-    for k in range(zdim):
-        spectrum_padded[:,:,k] = np.pad(spectrum[:,:,k],pad_width=pad_width,mode='mean')
-    return spectrum_padded
-
-
-def SAD(s1, s2):   # find the source later
+def SAD(s1, s2):   
     """
     Computes the spectral angle mapper between two vectors (in radians).
 
@@ -380,7 +304,7 @@ def SAD(s1, s2):   # find the source later
         sum_s1_s2 = np.dot(s1, s2)
         angle = math.acos(sum_s1_s2 / (s1_norm * s2_norm))
     except ValueError:
-        # python math don't like when acos is called with
+        # python math doesn't like when acos is called with
         # a value very near to 1
         return 0.0
     return angle
@@ -465,12 +389,6 @@ def save_tiff_stack(spectrum,outpath):
 def sparsity(spectrum):
     NumelSpectrum = spectrum.shape[0]*spectrum.shape[1]*spectrum.shape[1]
     return 100-(np.count_nonzero(spectrum)/NumelSpectrum)*100
-
-
-
-
-
-
 
 
 
