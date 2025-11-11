@@ -18,6 +18,7 @@ import math
 import hyperspy.api as hs
 import copy
 import pandas as pd
+from utils import *
 
 
 
@@ -235,69 +236,3 @@ class EM_EDX:
         return f"<EM_EDX | {len(self.processing_history)} steps logged>"
 
 
-
-def mean_filter(img, kernel_size=3):
-    """ Apply a mean filter to an image. 
-
-        Parameters
-        ----------
-        kernel_size: size (width/height) of the kernel
-    """
-    kernel = np.ones((kernel_size,kernel_size),np.float32)/(kernel_size*kernel_size)
-    return cv.filter2D(img,-1,kernel) 
-
-
-
-def MinMax(data):
-    # minmax the data (0-1 normalize)
-    return (data - np.min(data)) / (np.max(data) - np.min(data))
-
-
-def Normalize_uint8(img, normalize_by=None):
-    """Normalize an image then set to uint8.
-
-    Parameters
-    ----------
-    normalize_by : optional
-        Another array to normalize by.
-    """
-    if normalize_by is None:
-        mn = img.min()
-        mx = img.max()
-    else:
-        mn = normalize_by.min()
-        mx = normalize_by.max()
-
-    img_out = ((img-mn) / (mx-mn)) * 255
-    return img_out.astype(np.uint8)
-
-
-def SAD(s1, s2, eps=1e-12):
-    """
-    Computes the spectral angle mapper (SAD) between two spectra or arrays of spectra.
-
-    Parameters
-    ----------
-    s1 : np.ndarray
-        First spectrum or array (..., bands)
-    s2 : np.ndarray
-        Second spectrum or array (..., bands)
-    eps : float, optional
-        Small constant to avoid division by zero (default 1e-12)
-
-    Returns
-    -------
-    angle : np.ndarray or float
-        Spectral angle(s) in radians.
-    """
-    s1 = np.asarray(s1, dtype=float)
-    s2 = np.asarray(s2, dtype=float)
-
-    dot = np.sum(s1 * s2, axis=-1)
-    norm1 = np.linalg.norm(s1, axis=-1)
-    norm2 = np.linalg.norm(s2, axis=-1)
-
-    cos_theta = dot / (norm1 * norm2 + eps)
-    cos_theta = np.clip(cos_theta, -1.0, 1.0)
-
-    return np.arccos(cos_theta)
