@@ -19,6 +19,7 @@ import hyperspy.api as hs
 import copy
 import pandas as pd
 from utils import *
+from bm3d import bm3d
 
 
 
@@ -206,8 +207,7 @@ class EM_EDX:
             for k in range(b):
                 self.EDX[:,:,k] = MinMax(self.EDX[:,:,k])
         else:
-            self.EDX = MinMax(self.EDX)
-            
+            self.EDX = MinMax(self.EDX)    
         return self
 
     def FalseColor(self,bands=[4,25,28]):
@@ -217,6 +217,33 @@ class EM_EDX:
         b = Normalize_uint8(self.EDX[:,:,bands[2]])
         
         return cv.merge([r,g,b])
+
+    def PCA_bm3d(self, k=10, sigma=0.1, zscore=False):
+        """
+        Denoise with PCA + BM3D
+        
+        
+        Parameters
+        ----------
+        k: first k-components which are not denoised
+        sigma: std of the noise (parameter for bm3d)
+        """
+        h, w, b = self.EDX_dim
+        pca_model = PCA()
+        pca_model.fit(self.EDX_2D)
+        pca_scores = pca_model.transform(self.EDX_2D)
+        pca_scores_denoised = pca_scores.copy()
+
+        # denoise channels after p with bm3d
+        for i in range(k):
+            if i<k:
+                denoise_channel = pca_scores[:,i].reshape((h,w))
+                denoise_channel = bm3d(denoise_channel, sigma) 
+                pca_scores_denoised[:,i] =  denoise_channel.reshape((h*w,))
+
+        hsi_denoised_2D = pca_model.inverse_transform(pca_scores_denoised)
+        self.EDX = hsi_denoised_2D.reshape((h,w,b))
+        return self
 
 
     def summary(self):
