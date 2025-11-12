@@ -20,6 +20,7 @@ import copy
 import pandas as pd
 from utils import *
 from bm3d import bm3d
+from pysptools.noise import MNF
 
 
 
@@ -218,7 +219,7 @@ class EM_EDX:
         
         return cv.merge([r,g,b])
 
-    def PCA_bm3d(self, k=10, sigma=0.1, zscore=False):
+    def PCA_bm3d(self, k=10, sigma=0.1, zscore=False, poisson=False):
         """
         Denoise with PCA + BM3D
         
@@ -230,22 +231,39 @@ class EM_EDX:
         """
         h, w, b = self.EDX_dim
         pca_model = PCA()
-        pca_model.fit(self.EDX_2D)
-        pca_scores = pca_model.transform(self.EDX_2D)
-        pca_scores_denoised = pca_scores.copy()
 
-        # denoise channels after p with bm3d
-        for i in range(k):
-            if i<k:
-                denoise_channel = pca_scores[:,i].reshape((h,w))
-                denoise_channel = bm3d(denoise_channel, sigma) 
-                pca_scores_denoised[:,i] =  denoise_channel.reshape((h*w,))
-
-        hsi_denoised_2D = pca_model.inverse_transform(pca_scores_denoised)
+        # Poisson scaling
+        if poisson:
+            G = np.mean(self.EDX,axis=2).reshape(h*w,1)
+            H = np.mean(np.mean(self.EDX,axis=0),axis=0).reshape(b,-1)
+            W = G@np.transpose(H)
+            W = np.sqrt(W)    
+            hsi_2D_weighted = np.divide(self.EDX_2D,W)
+            pca_model.fit(hsi_2D_weighted)
+            pca_scores = pca_model.transform(hsi_2D_weighted)            
+        else:    
+            pca_model.fit(self.EDX_2D)
+            pca_scores = pca_model.transform(self.EDX_2D)
+  
+        # Denoise channels after p with bm3d
+        pca_scores_denoised = pca_scores.copy() 
+        for i in range(k,b):
+            print(f"Denoising PCA component {i+1}/{b} …", end="\r", flush=True)
+            denoise_channel = pca_scores[:,i].reshape((h,w))
+            denoise_channel = bm3d(denoise_channel, sigma) 
+            pca_scores_denoised[:,i] =  denoise_channel.reshape((h*w,))
+        
+        # Inverse transform
+        if poisson:
+            hsi_denoised_2D = np.multiply(pca_model.inverse_transform(pca_scores_denoised),W)   
+        else:
+            hsi_denoised_2D = pca_model.inverse_transform(pca_scores_denoised)
+        
         self.EDX = hsi_denoised_2D.reshape((h,w,b))
         return self
 
-
+        
+    
     def summary(self):
         """Return a pandas DataFrame summarizing the preprocessing history."""
         if not self.processing_history:
