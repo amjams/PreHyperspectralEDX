@@ -73,9 +73,18 @@ def mean_filter(img, kernel_size=3):
 
 
 
-def MinMax(data):
+def MinMax(data, return_extra=False):
     # minmax the data (0-1 normalize)
-    return (data - np.min(data)) / (np.max(data) - np.min(data))
+    min = np.min(data)
+    max = np.max(data)
+    if return_extra:
+        return (data - np.min(data)) / (np.max(data) - np.min(data)), min, max
+    else: 
+        return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+def MinMaxInverse(MinMax, min, max):
+    # return minmaxed data to original range
+    return MinMax*(max-min)+min
 
 
 def Normalize_uint8(img, normalize_by=None):

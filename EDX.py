@@ -219,7 +219,7 @@ class EM_EDX:
         
         return cv.merge([r,g,b])
 
-    def PCA_bm3d(self, k=10, sigma=0.1, zscore=False, poisson=False):
+    def PCA_bm3d(self, k=10, sigma=0.1, zscore=False, poisson=False, std_scale=False):
         """
         Denoise with PCA + BM3D
         
@@ -249,9 +249,15 @@ class EM_EDX:
         pca_scores_denoised = pca_scores.copy() 
         for i in range(k,b):
             print(f"Denoising PCA component {i+1}/{b} …", end="\r", flush=True)
-            denoise_channel = pca_scores[:,i].reshape((h,w))
-            denoise_channel = bm3d(denoise_channel, sigma) 
-            pca_scores_denoised[:,i] =  denoise_channel.reshape((h*w,))
+            denoise_channel = pca_scores[:, i].reshape((h, w))
+            scale = np.std(denoise_channel) if std_scale else 1
+            if scale > 0:
+                denoised = bm3d(denoise_channel/scale, sigma/scale)
+                denoise_channel = denoised * scale
+            else:
+                denoise_channel = bm3d(denoise_channel, sigma)
+        
+            pca_scores_denoised[:, i] = denoise_channel.reshape((h*w,))
         
         # Inverse transform
         if poisson:
