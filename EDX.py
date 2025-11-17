@@ -268,7 +268,7 @@ class EM_EDX:
         self.EDX = hsi_denoised_2D.reshape((h,w,b))
         return self
 
-        
+
     
     def summary(self):
         """Return a pandas DataFrame summarizing the preprocessing history."""
