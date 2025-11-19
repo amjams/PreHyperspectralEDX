@@ -147,8 +147,7 @@ def binning_xy(img, dim = None):
 
     Returns
     -------
-    angle : np.ndarray or float
-        Spectral angle(s) in radians.
+    binned image 
     """
     
     # old and new dimensions
@@ -169,7 +168,7 @@ def binning_xy(img, dim = None):
     fy, fx = old_y // new_y, old_x // new_x
  
     
-    return img.reshape(new_y, fy, new_x, fx)
+    return img.reshape(new_y, fy, new_x, fx).mean(axis=(1, 3))
 
 
 def create_masks(mask_dir):
