@@ -16,6 +16,8 @@ import jax.numpy as jnp
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorstore as ts
+import tempfile
+import pathlib
 
 from connectomics.common import bounding_box
 from sofima import flow_field
@@ -29,8 +31,24 @@ import time
 from scipy import interpolate
 
 
-#class sofima_transform:
-#    self.
+class sofima_transform:
+
+    """ class to store the obtained 
+
+        see _compute_flow() for details
+    """
+    def __init__(self, inv_map, n_align, min_peak_ratio, min_peak_sharpness,
+                       max_magnitude, max_deviation, patch_size, stride, pad_remove):
+        
+        self.inv_map = inv_map
+        self.n_align = n_align
+        self.min_peak_ratio = min_peak_ratio
+        self.min_peak_sharpness = min_peak_sharpness
+        self.max_magnitude= max_magnitude
+        self.max_deviation = max_deviation
+        self.patch_size = patch_size
+        self.stride = stride
+        self.pad_remove = pad_remove
 
 
 def _compute_flow(volume, patch_size, stride):
@@ -119,11 +137,18 @@ def get_alignment(haadf_stack,
     
     
     # Create the TensorStore objects for the stacks of images.
+    with tempfile.TemporaryDirectory() as tmp_root:
+        tmp_root = pathlib.Path(tmp_root)
+
+        ds1_path = tmp_root/"dataset1"
+        ds2_path = tmp_root/"dataset2"
+
+    
     unaligned_1x = ts.open({
         'driver': 'n5',
         'kvstore': {
              'driver': 'file',
-             'path': 'tmp/dataset1/',
+             'path': str(ds1_path),
          },
          'metadata': {
              'compression': {
@@ -140,7 +165,7 @@ def get_alignment(haadf_stack,
         'driver': 'n5',
         'kvstore': {
              'driver': 'file',
-             'path': 'tmp/dataset2/',
+             'path': str(ds2_path),
          },
          'metadata': {
              'compression': {
@@ -215,7 +240,23 @@ def get_alignment(haadf_stack,
     # Warping
     crop_size = 2048 - 2*pad_remove
     inv_map = map_utils.invert_map(solved, box1x, box1x, stride)
-    
+
+    # output
+    out = sofima_transform(inv_map, n_align, min_peak_ratio, min_peak_sharpness,
+                       max_magnitude, max_deviation, patch_size, stride, pad_remove)
+
+    return out
+
+
+def apply_transform_2D(img_stack, transformation):
+    """
+    Apply a sofima transormation on a single stack of images
+
+    Parameters:
+    -----------
+    img_stack 
+    """
+
     # Initialize warped list with cropped slice 0
     warped = [np.transpose(unaligned_1x[pad_remove:2048-pad_remove,pad_remove:2048-pad_remove,0:1,0].read().result(),[2, 1, 0])]
     
@@ -234,8 +275,6 @@ def get_alignment(haadf_stack,
         warped.append(warped_slice)
     
     warped_xyz = np.transpose(np.concatenate(warped, axis=0), [2, 1, 0])
+
     
-    return warped_xyz
-
-
     
