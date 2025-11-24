@@ -41,7 +41,11 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
         #elif 'HAADF' in repr(s[i]): 
             #haadf_idx = i
     indices = [[i.metadata.General.title, len(i.axes_manager.shape)] for i in s]
-    EDX_idx = indices.index(['EDS', 3])
+    if sum_frames:
+        EDX_idx = indices.index(['EDS', 3])
+    else:
+        EDX_idx = indices.index(['EDS', 4])
+        
     haadf_idx = indices.index(['HAADF', 3])
 
     # assign   
@@ -169,6 +173,34 @@ def binning_xy(img, dim = None):
  
     
     return img.reshape(new_y, fy, new_x, fx).mean(axis=(1, 3))
+
+def binning_xyz(EDX, dim = [2048,2048,250]):
+        """
+        General purpose binning for images in xyx.
+    
+        Parameters
+        ----------
+        img : 3D numpy array (EDX HSI)
+        dim : dimensions after binning
+    
+        Returns
+        -------
+        binned HSI 
+        """
+        
+        # original and new dimensions
+        old_y, old_x, old_b = EDX.shape
+        new_y, new_x, new_b = dim
+    
+        # binning factors
+        fy, fx, fb = old_y // new_y, old_x // new_x, old_b // new_b
+    
+        # EDX 
+        out = EDX.reshape(new_y, fy, new_x, fx, new_b, fb)
+        out = out.mean(axis=(1, 3, 5))
+
+        return out
+
 
 
 def create_masks(mask_dir):
