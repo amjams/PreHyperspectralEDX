@@ -11,6 +11,7 @@ import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
 from utils import *
 os.environ["JAX_PLATFORM_NAME"] = "cpu"  # change this to your convenience
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -29,16 +30,17 @@ from tqdm.notebook import tqdm
 from concurrent import futures
 import time
 from scipy import interpolate
+from EDX import *
 
 
-class sofima_transform:
+class sofima_alignment:
 
     """ class to store the obtained 
 
         see _compute_flow() for details
     """
     def __init__(self, inv_map, n_align, min_peak_ratio, min_peak_sharpness,
-                       max_magnitude, max_deviation, patch_size, stride, pad_remove):
+                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x):
         
         self.inv_map = inv_map
         self.n_align = n_align
@@ -49,6 +51,7 @@ class sofima_transform:
         self.patch_size = patch_size
         self.stride = stride
         self.pad_remove = pad_remove
+        self.box1x = box1x
 
 
 def _compute_flow(volume, patch_size, stride):
@@ -116,7 +119,7 @@ def get_alignment(haadf_stack,
         n_align = haadf_stack.shape[0]
     
     
-    # Reorder to (h, w, b)- and limit to 20 frames
+    # Reorder to (h, w, b)- and limit to n_align frames
     data_1x = haadf_stack.transpose(1, 2, 0)[..., None]
     data_1x = data_1x[:,:,:n_align,:]
     
@@ -242,22 +245,74 @@ def get_alignment(haadf_stack,
     inv_map = map_utils.invert_map(solved, box1x, box1x, stride)
 
     # output
-    out = sofima_transform(inv_map, n_align, min_peak_ratio, min_peak_sharpness,
-                       max_magnitude, max_deviation, patch_size, stride, pad_remove)
+    out = sofima_alignment(inv_map, n_align, min_peak_ratio, min_peak_sharpness,
+                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x)
 
     return out
 
 
-def apply_transform_2D(img_stack, transformation):
+def apply_alignment_2D(img_stack, alignment, data_type):
     """
-    Apply a sofima transormation on a single stack of images
+    Apply a sofima alignment on a single stack of images
 
     Parameters:
     -----------
-    img_stack 
-    """
+    img_stack: stack of images to apply the alignment to (n_frames, height, width)
+    alignment: the alignment object
+    data_type: of the input and output
 
-    # Initialize warped list with cropped slice 0
+    Returns:
+    img_stack_alligned: (height, width, n_frames)
+    """
+    
+    # get values from the alignment object
+    n_align = alignment.n_align
+    pad_remove = alignment.pad_remove
+    stride = alignment.stride
+    crop_size = 2048 - 2*pad_remove
+    inv_map = alignment.inv_map
+    box1x = alignment.box1x
+    
+    # Reorder to (h, w, b)- and limit to n_align frames
+    data_1x = img_stack.transpose(1, 2, 0)[..., None]
+    data_1x = data_1x[:,:,:n_align,:]
+    
+
+    # convert to 0-255, channel wise
+    if str(data_type) == 'uint8': 
+        for i in range(data_1x.shape[2]):
+            data_1x[:,:,i,0] = Normalize_uint8(data_1x[:,:,i,0]) #,normalize_by=data_1x[:,:,:,0]) #you can normalize by the whole stack
+        data_1x = data_1x.astype('uint8')
+
+    
+    
+    # Create the TensorStore objects for the stacks of images.
+    with tempfile.TemporaryDirectory() as tmp_root:
+        tmp_root = pathlib.Path(tmp_root)
+        ds1_path = tmp_root/"dataset1"
+
+    
+    unaligned_1x = ts.open({
+        'driver': 'n5',
+        'kvstore': {
+             'driver': 'file',
+             'path': str(ds1_path),
+         },
+         'metadata': {
+             'compression': {
+                 'type': 'gzip'
+             },
+             'dataType': data_type,
+             'dimensions': data_1x.shape,
+             'blockSize': [100, 100, 1, 1],
+         },
+         'create': True,
+         'delete_existing': True,}).result()
+
+    write_future = unaligned_1x.write(data_1x)
+    write_future.result()
+    
+    # Initialize warped list with cropped frame 0
     warped = [np.transpose(unaligned_1x[pad_remove:2048-pad_remove,pad_remove:2048-pad_remove,0:1,0].read().result(),[2, 1, 0])]
     
     for z in tqdm(range(1, unaligned_1x.shape[2])):
@@ -274,7 +329,134 @@ def apply_transform_2D(img_stack, transformation):
     
         warped.append(warped_slice)
     
-    warped_xyz = np.transpose(np.concatenate(warped, axis=0), [2, 1, 0])
+    img_stack_aligned = np.transpose(np.concatenate(warped, axis=0), [2, 1, 0])
 
+    return img_stack_aligned
     
+
+
+def store_unaligned_hsi(emd_path, out_path, n_frames):
+    """
+    Store temporarily the stack of unaligined
+    EDX cubes in order to align them
+
+    Parameters:
+    -----------
+    emd_path: path to the EMD file containing the EDX data
+    n_frames: the number of frames that should be aligned
+
+    out_path: where the unaligned stack of EDX is saved    
+
+     Returns
+    -------
+    ts.TensorStore
+    """
+
+    out_path = pathlib.Path(out_path)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # Load first frame
+    edx_tmp, _, _ = load_EDX(
+        file_path=emd_path,
+        first_frame=0,
+        last_frame=1,
+        sum_frames=True,
+        haadf_last_frame=False
+    )
+
+    # Bin Z-axis (discard first 96 channels)
+    edx_tmp = binning_xyz(edx_tmp[:, :, 96:], dim=[2048, 2048, 250])
+    h,w,b = edx_tmp.shape 
+
+    # Allocate full array in (h, w, n_frames, b)
+    data_1x = np.zeros((h, w, n_frames, b), dtype=np.float32)
+
+    # Store frame 0
+    data_1x[:, :, 0, :] = edx_tmp.astype(np.float32)
+
+    # ---- Load remaining frames ----
+    for k in range(1, n_frames):
+        edx_tmp, _, _ = load_EDX(
+            file_path=emd_path,
+            first_frame=k,
+            last_frame=k+1,
+            sum_frames=True,
+            haadf_last_frame=False
+        )
+
+        edx_tmp = binning_xyz(edx_tmp[:, :, 96:], dim=[2048, 2048, 250])
+        data_1x[:, :, k, :] = edx_tmp.astype(np.float32)
+
+        print(f"Loaded frame {k+1:02d}/{n_frames:02d}", end="\r")
+
+    print("\nAll frames loaded.")
+
+    # ---- Write TensorStore ----
+    store = ts.open({
+        "driver": "n5",
+        "kvstore": {
+            "driver": "file",
+            "path": str(out_path),
+        },
+        "metadata": {
+            "compression": {"type": "gzip"},
+            "dataType": "float32",
+            "dimensions": data_1x.shape,  # (h, w, n_frames, b)
+            "blockSize": [64, 64, 1, b],  
+        },
+        "create": True,
+        "delete_existing": True,
+    }).result()
+
+    store.write(data_1x).result()
+    print(f"Saved unaligned hyperspectral stack to: {out_path}")
+
+    return store
+
+
+def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):   
+    
+    """
+    Apply a sofima alignment on a stack of HSIs
+
+    Parameters:
+    -----------
+    hsi_stack_loc_path: location to the stack of TensorStore of 
+                        HSI to apply the alignment to (h, w, n_frames, b)
+    alignment: the alignment object
+    data_type: of the input and output
+    store_unaligned_stack: 
+
+    Returns: the sum of the aligned HSIs
+    """
+
+    # load the stack
+    store = ts.open({
+        "driver": "n5",
+        "kvstore": {
+            "driver": "file",
+            "path": hsi_stack_loc_path,
+        },
+        "open": True
+    }).result()
+        
+    # get dimensions
+    h, w, n_align, b = store.shape
+
+    # Initialize a summed (and aligned frame)
+    pad_remove = alignment.pad_remove
+    crop_size_h = h - 2*pad_remove
+    crop_size_w = w - 2*pad_remove
+    hsi_summed_aligned = np.zeros((crop_size_h,crop_size_w,b),dtype=data_type)
+
+    # Align channel by channel using the sofima alignment and add
+    for k in range(b):
+        # a single stack of images to be aligned
+        img_stack = store[:,:,:,k].read().result()
+        img_stack_aligned = apply_alignment_2D(np.transpose(img_stack, [2, 0, 1]), alignment, data_type)
+        img_stack_aligned_summed = img_stack_aligned.sum(axis=2)
+        hsi_summed_aligned[:,:,k] = hsi_summed_aligned[:,:,k]+img_stack_aligned_summed
+        print("Channel %03d out of %03d has been aligned" % (k+1,b))
+
+    return hsi_summed_aligned
     
