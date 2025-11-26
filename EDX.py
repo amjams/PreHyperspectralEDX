@@ -19,8 +19,11 @@ import hyperspy.api as hs
 import copy
 import pandas as pd
 from utils import *
+from utils_sofima import *
 from bm3d import bm3d
 from pysptools.noise import MNF
+
+
 
 
 
@@ -268,6 +271,9 @@ class EM_EDX:
         self.EDX = hsi_denoised_2D.reshape((h,w,b))
         return self
 
+    def sofima_align(self):
+        return self
+        
 
     
     def summary(self):
