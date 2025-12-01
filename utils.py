@@ -100,11 +100,11 @@ def Normalize_uint8(img, normalize_by=None):
         Another array to normalize by.
     """
     if normalize_by is None:
-        mn = img.min()
-        mx = img.max()
+        mn = np.nanmin(img)
+        mx = np.nanmax(img)
     else:
-        mn = normalize_by.min()
-        mx = normalize_by.max()
+        mn = np.nanmin(normalize_by)
+        mx = np.nanmax(normalize_by)
 
     img_out = ((img-mn) / (mx-mn)) * 255
     return img_out.astype(np.uint8)

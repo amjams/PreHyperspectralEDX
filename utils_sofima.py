@@ -30,6 +30,7 @@ from tqdm.notebook import tqdm
 from concurrent import futures
 import time
 from scipy import interpolate
+from scipy.stats import pearsonr
 from EDX import *
 
 
@@ -113,6 +114,7 @@ def get_alignment(haadf_stack,
         ----------
         warped_xyz: the alignment transformation
     """
+
 
     # set number of frames to align to all if not set
     if np.isnan(n_align):
@@ -425,7 +427,6 @@ def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):
                         HSI to apply the alignment to (h, w, n_frames, b)
     alignment: the alignment object
     data_type: of the input and output
-    store_unaligned_stack: 
 
     Returns: the sum of the aligned HSIs
     """
@@ -459,4 +460,56 @@ def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):
         print("Channel %03d out of %03d has been aligned" % (k+1,b))
 
     return hsi_summed_aligned
+
+def eval_alignment(img_stack_unaligned, img_stack_aligned, metric=None):
+   
+    """
+    Evaluate a (dis)similarity metric between first frame and subsequent 
+    ones, before and after alignment
+
+    Parameters:
+    -----------
+    img_stack_unaligned: the imack stack before alignment (h, w, frames or depth etc) 
+    img_stack_aligned: the image stack after alignment (h, w, frames or depth etc)
+    they should have the same dtype
+    metric: the evaluation metric
+
+    Returns:
+    --------
+    metric_before: metric list before alignment
+    metric_after: metric list after alignment
+    """
+
+    # get dimensions
+    h, w, n_align = img_stack_unaligned.shape
+
+    # Prepare metric function
+    if metric is None or metric == 'pcc':
+        def metric_func(x, y):
+            return pearsonr(x, y)[0]
+    else:
+        # Callable passed by user
+        metric_func = metric
+
+    metric_before_list = []
+    metric_after_list = []
+
+    # Reference frame = frame 0
+    ref_before = img_stack_unaligned[:, :, 0].ravel()
+    ref_after  = img_stack_aligned[:, :, 0].ravel()
+
+    for i in range(n_align):
+
+        curr_before = img_stack_unaligned[:, :, i].ravel()
+        curr_after  = img_stack_aligned[:, :, i].ravel()
+
+        metric_before_list.append(metric_func(ref_before, curr_before))
+        metric_after_list.append(metric_func(ref_after, curr_after))
+
+    return metric_before_list, metric_after_list
+    
+        
+    
+
+    
     
