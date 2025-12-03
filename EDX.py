@@ -24,6 +24,7 @@ import utils_sofima
 from bm3d import bm3d
 from pysptools.noise import MNF
 import tensorstore as ts
+import pathlib
 
 
 
@@ -274,17 +275,20 @@ class EM_EDX:
         self.EDX = hsi_denoised_2D.reshape((h,w,b))
         return self
 
-    def sofima_align(self, hsi_stack_loc_path, alignment, data_type):   
+    def sofima_align(self, hsi_stack_path, alignment, data_type,
+                    save_aligned=False, hsi_stack_aligned_path=None):   
     
         """
         Apply a sofima alignment on a stack of HSIs
     
         Parameters:
         -----------
-        hsi_stack_loc_path: location to the stack of TensorStore of 
+        hsi_stack_path: location to the stack of TensorStore of 
                             HSI to apply the alignment to (h, w, n_frames, b)
         alignment: the alignment object
         data_type: of the input and output
+        save_aligned: Whether to save a tensorstore the aligned stack of HSIs
+        hsi_stack_aligned_path: Where to save the above
     
         Returns: the sum of the aligned HSIs
         """
@@ -294,7 +298,7 @@ class EM_EDX:
             "driver": "n5",
             "kvstore": {
                 "driver": "file",
-                "path": hsi_stack_loc_path,
+                "path": hsi_stack_path,
             },
             "open": True
         }).result()
@@ -305,6 +309,11 @@ class EM_EDX:
     
         # Initialize a summed (and aligned frame)
         hsi_summed_aligned = np.full((h, w, b), np.nan, dtype=data_type)
+
+        # Optional: prepare aligned TensorStore
+        if save_aligned:
+            aligned_stack = np.full((h, w, n_align, b), np.nan, dtype=data_type)
+    
     
         # Align channel by channel using the sofima alignment and add
         for k in range(b):
@@ -313,7 +322,39 @@ class EM_EDX:
             img_stack_aligned = utils_sofima.apply_alignment_2D(np.transpose(img_stack, [2, 0, 1]), alignment, data_type)
             img_stack_aligned_summed = img_stack_aligned.sum(axis=2)
             hsi_summed_aligned[pad_remove:h-pad_remove, pad_remove:w-pad_remove,k] = img_stack_aligned_summed
+
+            # Optional: write to in-RAM aligned stack with NaN padding
+            if save_aligned:
+                # Transpose back to (h, w, n_align)
+                padded = np.full((h, w, n_align), np.nan, dtype=data_type)
+                padded[pad_remove:h-pad_remove, pad_remove:w-pad_remove, :] = img_stack_aligned
+                aligned_stack[:, :, :, k] = padded
+            
             print("Channel %03d out of %03d has been aligned" % (k+1,b))
+
+        # Save the aligned stack
+        if save_aligned:
+            if hsi_stack_aligned_path is None:
+                raise ValueError("Provide hsi_stack_aligned_path if save_aligned=True")
+            out_path = pathlib.Path(hsi_stack_aligned_path)
+            out_path.mkdir(parents=True, exist_ok=True)
+    
+            store_aligned = ts.open({
+                "driver": "n5",
+                "kvstore": {"driver": "file", "path": str(out_path)},
+                "metadata": {
+                    "compression": {"type": "gzip"},
+                    "dataType": data_type,
+                    "dimensions": aligned_stack.shape,
+                    "blockSize": [64, 64, 1, 1],  # spatial blocks per frame
+                },
+                "create": True,
+                "delete_existing": True,
+            }).result()
+    
+            # Write
+            store_aligned.write(aligned_stack).result()
+            print(f"Saved aligned HSI stack to: {str(out_path)}")
 
         self.EDX = hsi_summed_aligned
         return self
