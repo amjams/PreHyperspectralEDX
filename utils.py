@@ -86,6 +86,17 @@ def MinMax(data, return_extra=False):
     else: 
         return (data - np.min(data)) / (np.max(data) - np.min(data))
 
+
+def OneMinusOne(data, return_extra=False):
+    # -1 and 1 normalize
+    minmax, min, max = MinMax(data, return_extra=True)
+    
+    if return_extra:
+        return 2*minmax-1, min, max
+    else: 
+        return 2*minmax-1
+
+
 def MinMaxInverse(MinMax, min, max):
     # return minmaxed data to original range
     return MinMax*(max-min)+min

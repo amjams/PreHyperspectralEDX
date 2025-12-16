@@ -1,10 +1,14 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
+from EDX import *
+from utils import *
 import torch
 from torch.utils.data import Dataset
 import tensorstore as ts
 import numpy as np
 
 class HyperspectralPatchDataset(Dataset):
-    def __init__(self, store_path, patch_size=(64,64), bands=None, n_input_frames=10, n_patches=1000):
+    def __init__(self, store_path, patch_size=(64,64), bands=None, n_input_frames=10, n_patches=1000, conv1dmode=False):
         self.store = ts.open({
             "driver": "n5",
             "kvstore": {
@@ -20,6 +24,10 @@ class HyperspectralPatchDataset(Dataset):
         self.n_input_frames = n_input_frames
         self.n_patches = n_patches
         self.bands = bands
+        self.conv1dmode = conv1dmode
+
+        # normalize the dataset
+        #dataset = OneMinusOne(self.store.read().result())
         
     def __len__(self):
         return self.n_patches
@@ -38,15 +46,24 @@ class HyperspectralPatchDataset(Dataset):
             patch = self.store[top:top+h_t, left:left+w_t, :, :].read().result()
         else:
             patch = self.store[top:top+h_t, left:left+w_t, :, self.bands].read().result()
+
         patch = np.nan_to_num(patch, nan=0.0)
 
-        
+
+        # sum along the frame axis
         input_patch = patch[:, :, input_idx, :].sum(axis=2)
         output_patch = patch[:, :, output_idx, :].sum(axis=2)
-
         
-        input_patch = torch.from_numpy(input_patch).float().permute(2,0,1)   # (b, h_t, w_t)
-        output_patch = torch.from_numpy(output_patch).float().permute(2,0,1)
+
+
+        # Mean the patch for conv1D mode
+        if self.conv1dmode:
+            input_patch = torch.from_numpy(input_patch).float().permute(2,0,1).mean(axis=[1,2]).unsqueeze(0)
+            output_patch = torch.from_numpy(output_patch).float().permute(2,0,1).mean(axis=[1,2]).unsqueeze(0) 
+        else:
+            input_patch = torch.from_numpy(input_patch).float().permute(2,0,1)   # (batch, h_t, w_t)
+            output_patch = torch.from_numpy(output_patch).float().permute(2,0,1)
+        
         
         return input_patch, output_patch
 
