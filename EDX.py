@@ -25,6 +25,9 @@ from bm3d import bm3d
 from pysptools.noise import MNF
 import tensorstore as ts
 import pathlib
+from bm3d import bm3d, BM3DStages
+from advanced_denoising.pymultiscale import *
+import matlab.engine
 
 
 
@@ -226,7 +229,7 @@ class EM_EDX:
         
         return cv.merge([r,g,b])
 
-    def PCA_bm3d(self, k=10, sigma=0.1, zscore=False, poisson=False, std_scale=False):
+    def PCA_bm3d(self, k=10, poisson=False):
         """
         Denoise with PCA + BM3D
         
@@ -234,10 +237,15 @@ class EM_EDX:
         Parameters
         ----------
         k: first k-components which are not denoised
-        sigma: std of the noise (parameter for bm3d)
+        poisson: 
         """
         h, w, b = self.EDX_dim
         pca_model = PCA()
+
+        # Start matlab engine and set path
+        eng = matlab.engine.start_matlab()
+        matlab_path = eng.genpath('../matlab/')   # add path recursively
+        eng.addpath(matlab_path, nargout=0)
 
         # Poisson scaling
         if poisson:
@@ -249,22 +257,40 @@ class EM_EDX:
             pca_model.fit(hsi_2D_weighted)
             pca_scores = pca_model.transform(hsi_2D_weighted)            
         else:    
-            pca_model.fit(self.EDX_2D)
-            pca_scores = pca_model.transform(self.EDX_2D)
+            pca_model.fit(np.nan_to_num(self.EDX_2D, nan=0.0))
+            pca_scores = pca_model.transform(np.nan_to_num(self.EDX_2D, nan=0.0))
   
         # Denoise channels after p with bm3d
         pca_scores_denoised = pca_scores.copy() 
         for i in range(k,b):
             print(f"Denoising PCA component {i+1}/{b} …", end="\r", flush=True)
-            denoise_channel = pca_scores[:, i].reshape((h, w))
-            scale = np.std(denoise_channel) if std_scale else 1
-            if scale > 0:
-                denoised = bm3d(denoise_channel/scale, sigma/scale)
-                denoise_channel = denoised * scale
-            else:
-                denoise_channel = bm3d(denoise_channel, sigma)
+            channel_noisy = pca_scores[:, i].reshape((h, w))
+            channel_noisy = np.nan_to_num(channel_noisy, nan=0.0)
+            channel_noisy = np.ascontiguousarray(channel_noisy)
+            
+            # estimate parameters
+            params = eng.estimate_noise(channel_noisy, nargout=1)
+            a = params[0][0] if params[0][0]>=0 else 1e-30
+            b_ = params[0][1] if params[0][1]>=0 else 1e-30
+            sigma = np.sqrt(b_)
+
+            # Anscombe transform forward
+            fz = generalized_anscombe(channel_noisy, a, sigma, gain=1.0)
+
+            # Normalize
+            sigma_den = 1
+            fz, min, max = MinMax(fz, return_extra=True)
+            sigma_den = sigma_den/(max-min)
+
+            # Denoise
+            channel_bm3d = bm3d(fz, sigma_psd=sigma_den, stage_arg=BM3DStages.ALL_STAGES)
+
+            # Inverse Anscombe
+            channel_bm3d = channel_bm3d*(max-min)+min
+            channel_bm3d = inverse_generalized_anscombe(channel_bm3d, a, sigma, gain=1.0)
+            channel_bm3d = np.asarray(channel_bm3d)
         
-            pca_scores_denoised[:, i] = denoise_channel.reshape((h*w,))
+            pca_scores_denoised[:, i] = channel_bm3d.reshape((h*w,))
         
         # Inverse transform
         if poisson:
@@ -274,6 +300,71 @@ class EM_EDX:
         
         self.EDX = hsi_denoised_2D.reshape((h,w,b))
         return self
+
+    def bm3d_hsi(self, estimation_band=None, pad_remove=0):
+        """
+        Denoise with BM3D channel-wise
+        
+        
+        Parameters
+        ----------
+        estimation_band: index of the channel/band used to estimate the noise
+        sigma: if not None, override the above parameter. If 'PCA', then based on pc0
+        """
+
+        # Get dimensions and initialize denoised EDX
+        h, w, b = self.EDX_dim
+        EDX_denoised = np.copy(self.EDX)
+        
+        # Start matlab engine and set path
+        eng = matlab.engine.start_matlab()
+        matlab_path = eng.genpath('../matlab/')   # add path recursively
+        eng.addpath(matlab_path, nargout=0)
+
+        #if estimation_band is None and sigma is None: # add the other options later
+        #    new_dim = h-2*pad_remove
+        #    noisy_HSI_reshaped = tile.EDX[pad_remove:h-pad_remove, pad_remove:w-pad_remove,:].reshape((new_dim**2,-1))
+        #    noisy_HSI_pc0 = PCA(n_components=1).fit_transform(noisy_HSI_reshaped)
+        #    noisy_HSI_pc0 = noisy_HSI_pc0.reshape((new_dim,new_dim))
+        #    params = eng.estimate_noise(np.ascontiguousarray(noisy_HSI_reshaped), nargout=1)
+
+        for channel_idx in range(b):
+            # select channel and remove padding
+            channel_noisy = self.EDX[pad_remove:h-pad_remove, pad_remove:w-pad_remove,channel_idx]
+            channel_noisy = np.nan_to_num(channel_noisy, nan=0.0)
+            channel_noisy = np.ascontiguousarray(channel_noisy)
+
+            # estimate parameters
+            params = eng.estimate_noise(channel_noisy, nargout=1)
+            a = params[0][0] if params[0][0]>=0 else 1e-30
+            b_ = params[0][1] if params[0][1]>=0 else 1e-30
+            sigma = np.sqrt(b_)
+
+            # Anscombe transform forward
+            fz = generalized_anscombe(channel_noisy, a, sigma, gain=1.0)
+
+            # Normalize
+            sigma_den = 1
+            fz, min, max = MinMax(fz, return_extra=True)
+            sigma_den = sigma_den/(max-min)
+
+            # Denoise
+            channel_bm3d = bm3d(fz, sigma_psd=sigma_den, stage_arg=BM3DStages.ALL_STAGES)
+
+            # Inverse Anscombe
+            channel_bm3d = channel_bm3d*(max-min)+min
+            channel_bm3d = inverse_generalized_anscombe(channel_bm3d, a, sigma, gain=1.0)
+            channel_bm3d = np.asarray(channel_bm3d)
+            #channel_bm3d = match_histograms(channel_bm3d, channel_noisy)
+
+            # Assign
+            EDX_denoised[pad_remove:h-pad_remove, pad_remove:w-pad_remove,channel_idx] = channel_bm3d
+            print("Channel %03d out of %03d has been denoised" % (channel_idx+1,b))
+            
+        self.EDX = EDX_denoised
+        return self
+        
+    
 
     def sofima_align(self, hsi_stack_path, alignment, data_type,
                     save_aligned=False, hsi_stack_aligned_path=None):   
