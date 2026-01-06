@@ -21,11 +21,12 @@ import pandas as pd
 from utils import *
 #from utils_sofima import *
 import utils_sofima
-from bm3d import bm3d
 from pysptools.noise import MNF
 import tensorstore as ts
 import pathlib
 from bm3d import bm3d, BM3DStages
+from bm4d import bm4d, BM4DStages
+
 from advanced_denoising.pymultiscale import *
 import matlab.engine
 
@@ -364,7 +365,19 @@ class EM_EDX:
         self.EDX = EDX_denoised
         return self
         
-    
+    def bm4d_hsi(self, sigma = 0.05):
+        """
+        Apply BM4D to the EDX HSI
+
+        Parameters:
+        -----------
+        sigma: noise standard deviation
+        """
+        
+        self.EDX = bm4d(self.EDX, sigma_psd = sigma, stage_arg=BM4DStages.ALL_STAGES)
+
+        return self
+        
 
     def sofima_align(self, hsi_stack_path, alignment, data_type,
                     save_aligned=False, hsi_stack_aligned_path=None):   
