@@ -26,6 +26,8 @@ import tensorstore as ts
 import pathlib
 from bm3d import bm3d, BM3DStages
 from bm4d import bm4d, BM4DStages
+import gc
+import tracemalloc
 
 from advanced_denoising.pymultiscale import *
 import matlab.engine
@@ -379,7 +381,7 @@ class EM_EDX:
         return self
         
 
-    def sofima_align(self, hsi_stack_path, alignment, data_type,
+    def sofima_align(self, hsi_stack_path, alignment, data_type,   # check the save_aligned False option
                     save_aligned=False, hsi_stack_aligned_path=None):   
     
         """
@@ -391,7 +393,7 @@ class EM_EDX:
                             HSI to apply the alignment to (h, w, n_frames, b)
         alignment: the alignment object
         data_type: of the input and output
-        save_aligned: Whether to save a tensorstore the aligned stack of HSIs
+        save_aligned: Whether to save a tensorstore of the aligned (non-summed) stack of HSIs
         hsi_stack_aligned_path: Where to save the above
     
         Returns: the sum of the aligned HSIs
@@ -423,10 +425,27 @@ class EM_EDX:
         for k in range(b):
             # a single stack of images to be aligned
             img_stack = store[:,:,:,k].read().result()
-            img_stack_aligned = utils_sofima.apply_alignment_2D(np.transpose(img_stack, [2, 0, 1]), alignment, data_type)
+            img_stack_reshaped = np.transpose(img_stack, [2, 0, 1])
+            img_stack_aligned = utils_sofima.apply_alignment_2D(img_stack_reshaped, alignment, data_type)
             img_stack_aligned_summed = img_stack_aligned.sum(axis=2)
             hsi_summed_aligned[pad_remove:h-pad_remove, pad_remove:w-pad_remove,k] = img_stack_aligned_summed
 
+            # Measure memory usage before deletion
+            tracemalloc.start()
+            snapshot1 = tracemalloc.take_snapshot()
+            
+            # memory tricks that might not work
+            del img_stack, img_stack_reshaped, img_stack_aligned, img_stack_aligned_summed
+
+            # Force garbage collection to ensure memory release
+            gc.collect()
+            
+            # Measure memory usage after deletion
+            snapshot2 = tracemalloc.take_snapshot()
+            stats = snapshot2.compare_to(snapshot1, 'lineno')
+            print(f"Released memory: {stats[0].size_diff / 10**6:.2f} MB")
+            
+            
             # Optional: write to in-RAM aligned stack with NaN padding
             if save_aligned:
                 # Transpose back to (h, w, n_align)
@@ -463,6 +482,10 @@ class EM_EDX:
         self.EDX = hsi_summed_aligned
         return self
 
+     
+
+
+  
     
     def summary(self):
         """Return a pandas DataFrame summarizing the preprocessing history."""

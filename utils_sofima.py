@@ -416,6 +416,63 @@ def store_unaligned_hsi(emd_path, out_path, n_frames):
     return store
 
 
+def store_unaligned_hsi_alt(emd_path, out_path, n_frames):  # improved by GPT
+
+    out_path = pathlib.Path(out_path)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # ---- Load one frame to get shape ----
+    edx_tmp, _, _ = load_EDX(
+        file_path=emd_path,
+        first_frame=0,
+        last_frame=1,
+        sum_frames=True,
+        haadf_last_frame=False
+    )
+
+    edx_tmp = binning_xyz(edx_tmp[:, :, 96:], dim=[2048, 2048, 250])
+    h, w, b = edx_tmp.shape
+
+    # ---- Create TensorStore on disk ----
+    store = ts.open({
+        "driver": "n5",
+        "kvstore": {
+            "driver": "file",
+            "path": str(out_path),
+        },
+        "metadata": {
+            "compression": {"type": "gzip"},
+            "dataType": "float32",
+            "dimensions": [h, w, n_frames, b],
+            "blockSize": [64, 64, 1, b],  # frame-aligned chunks
+        },
+        "create": True,
+        "delete_existing": True,
+    }).result()
+
+    # ---- Write frame 0 ----
+    store[:, :, 0, :].write(edx_tmp.astype(np.float32)).result()
+
+    # ---- Stream remaining frames ----
+    for k in range(1, n_frames):
+        edx_tmp, _, _ = load_EDX(
+            file_path=emd_path,
+            first_frame=k,
+            last_frame=k+1,
+            sum_frames=True,
+            haadf_last_frame=False
+        )
+
+        edx_tmp = binning_xyz(edx_tmp[:, :, 96:], dim=[2048, 2048, 250])
+
+        store[:, :, k, :].write(edx_tmp.astype(np.float32)).result()
+
+        print(f"Loaded frame {k+1:02d}/{n_frames:02d}", end="\r")
+
+    print("\nAll frames stored.")
+    return store
+
+
 def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):   
     
     """
@@ -425,10 +482,11 @@ def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):
     -----------
     hsi_stack_loc_path: location to the stack of TensorStore of 
                         HSI to apply the alignment to (h, w, n_frames, b)
+                        
     alignment: the alignment object
     data_type: of the input and output
 
-    Returns: the sum of the aligned HSIs
+    Returns: the sum of the aligned HSIs (h, w, b)
     """
 
     # load the stack
@@ -460,6 +518,9 @@ def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):
         print("Channel %03d out of %03d has been aligned" % (k+1,b))
 
     return hsi_summed_aligned
+
+
+
 
 def eval_alignment(img_stack_unaligned, img_stack_aligned, metric=None):
    
