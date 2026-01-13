@@ -41,7 +41,7 @@ class sofima_alignment:
         see _compute_flow() for details
     """
     def __init__(self, inv_map, n_align, min_peak_ratio, min_peak_sharpness,
-                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x):
+                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x, align_to_zero):
         
         self.inv_map = inv_map
         self.n_align = n_align
@@ -53,12 +53,14 @@ class sofima_alignment:
         self.stride = stride
         self.pad_remove = pad_remove
         self.box1x = box1x
+        self.align_to_zero = align_to_zero
 
 
-def _compute_flow(volume, patch_size, stride):
+def _compute_flow(volume, patch_size, stride, align_to_zero=False):
   """ flow estimation. See below
     https://colab.research.google.com/github/google-research/sofima/blob/main/notebooks/em_alignment.ipynb
-      
+
+      align_to_zero: align everything to the starting slice
   """
   mfc = flow_field.JAXMaskedXCorrWithStatsCalculator()
   flows = []
@@ -81,7 +83,9 @@ def _compute_flow(volume, patch_size, stride):
       # available GPU capacity, but small enough so that the batch fits in GPU RAM.
       flows.append(mfc.flow_field(prev, curr, (patch_size, patch_size),
                                   (stride, stride), batch_size=256))
-      prev = curr
+      
+      if align_to_zero:
+        prev = curr
 
   return flows
 
@@ -94,7 +98,8 @@ def get_alignment(haadf_stack,
                   max_deviation=0,
                   patch_size = 100,
                   stride = 25,
-                  pad_remove = 0):
+                  pad_remove = 0,
+                  align_to_zero=False):
                   
     """ Get SOFIMA transformation
 
@@ -225,22 +230,35 @@ def get_alignment(haadf_stack,
     final_flow = flow_utils.reconcile_flows((f1, f2_hires), max_gradient=0, max_deviation=20, min_patch_size=400)
 
     # mesh optimzation
-    config = mesh.IntegrationConfig(dt=0.001, gamma=0.0, k0=0.001, k=0.1, stride=(stride, stride), num_iters=1000,
+    config = mesh.IntegrationConfig(dt=0.001, gamma=0.0, k0=0.01, k=0.1, stride=(stride, stride), num_iters=1000,
                                 max_iters=100000, stop_v_max=0.005, dt_max=1000, start_cap=0.01,
                                 final_cap=10, prefer_orig_order=True)
+
+
+    if align_to_zero:
+        solved = [np.zeros_like(final_flow[:, 0:1, ...])]   # slice 0 fixed
+        for z in tqdm(range(final_flow.shape[1])):
+            target = final_flow[:, z:z+1, ...]
+        
+            x0 = np.zeros_like(target)    # initial guess
+            x, _, _ = mesh.relax_mesh(x0, target, config)
+            solved.append(np.array(x)) 
+    else:
+        solved = [np.zeros_like(final_flow[:, 0:1, ...])]
+        origin = jnp.array([0., 0.])
     
-    solved = [np.zeros_like(final_flow[:, 0:1, ...])]
-    origin = jnp.array([0., 0.])
+        for z in tqdm(range(0, final_flow.shape[1])):
+          prev = map_utils.compose_maps_fast(final_flow[:, z:z+1, ...], origin, stride,
+                                             solved[-1], origin, stride)
     
-    for z in tqdm(range(0, final_flow.shape[1])):
-      prev = map_utils.compose_maps_fast(final_flow[:, z:z+1, ...], origin, stride,
-                                         solved[-1], origin, stride)
-      x = np.zeros_like(solved[0])
-      x, e_kin, num_steps = mesh.relax_mesh(x, prev, config)
-      x = np.array(x)
-      solved.append(x)
+          x = np.zeros_like(solved[0])
+          x, e_kin, num_steps = mesh.relax_mesh(x, prev, config)
+          x = np.array(x)
+          solved.append(x)
     
     solved = np.concatenate(solved, axis=1)
+
+
 
     # Warping
     crop_size = 2048 - 2*pad_remove
@@ -248,7 +266,7 @@ def get_alignment(haadf_stack,
 
     # output
     out = sofima_alignment(inv_map, n_align, min_peak_ratio, min_peak_sharpness,
-                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x)
+                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x, align_to_zero)
 
     return out
 
