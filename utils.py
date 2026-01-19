@@ -285,6 +285,9 @@ def sil_scores(hsi, masks, metric='euclidean'):
     return sil_img.reshape((h, w))
 
 
+
+
+
     
 
 
