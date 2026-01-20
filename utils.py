@@ -285,6 +285,79 @@ def sil_scores(hsi, masks, metric='euclidean'):
     return sil_img.reshape((h, w))
 
 
+def get_spectra(hsi, roi_pixel, size=3, all_spectra=False):
+    """
+    Return the spectra in (sizexsize) square centered around roi_pixel
+
+    Parameters
+    ----------
+    hsi : 3D numpy array
+    roi_pixel : (x,y) coordinates of the pixel, tuple or list.
+    size : (size x size) of the square from which to return spectra.
+    all_spectra : return all the spectra in the roi (default returns only the mean).
+
+    Returns
+    -------
+
+    """
+
+    return
+
+
+def hsi_multi_scale(hsi,radii=[1],sigma=1):
+    """
+    Return the Gaussian extended (multi-scale) versions of the HSI
+
+    See: https://github.com/amjams/HyperspectralEDX/blob/main/functions_EDX.py
+
+    Parameters
+    ----------
+    hsi : 3D numpy array
+    radii : Radii of the Gaussian filters
+    sigma : Std. deviation of the Gaussian filter
+    
+    Returns
+    -------
+
+    """
+    # get hsi dimensions
+    h, w, b = hsi.shape
+    
+    # determine the largest radius
+    maxr = np.max(np.asarray(radii))
+    
+    # initialize an array to the save the new features
+    hsi_extended = np.zeros((h,w,b*(len(radii)+1)))
+
+    hsi_extended[:,:,:b] = hsi
+    
+    for idx,r in enumerate(radii):
+        idx = idx+1
+        hsi_extended[:,:,b*idx:(b*idx)+b] = GaussFilterCube(hsi,size=r*2+1,sigma=2)
+    
+    return hsi_extended
+    
+
+def GaussFilter(im,apply=True,sigma = 2, size=3):
+    """
+    See: See: https://github.com/amjams/HyperspectralEDX/blob/main/functions_EDX.py
+    """
+    if apply:
+        kernel = np.ones((size,size),np.float32)/(size*size)
+        im_filtered = cv.GaussianBlur(im,(size,size),sigmaX = sigma, sigmaY= sigma, borderType =cv.BORDER_DEFAULT)
+    else:
+        im_filtered= im
+    return im_filtered
+
+
+def GaussFilterCube(hsi, sigma = 2, size=3):
+    """
+    See: See: https://github.com/amjams/HyperspectralEDX/blob/main/functions_EDX.py
+    """
+    hsi_filtered = np.zeros(hsi.shape)
+    for i in range(hsi.shape[2]): 
+        hsi_filtered[:,:,i] = GaussFilter(hsi[:,:,i],apply=True,sigma=sigma,size=size)
+    return hsi_filtered
 
 
 
