@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_samples
+from skimage.metrics import peak_signal_noise_ratio
 import sys
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -11,11 +12,13 @@ import math
 import hyperspy.api as hs
 import copy
 import tifffile as tif
+from pprint import PrettyPrinter
 
 
 
 
-def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame=True): 
+
+def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame=True, return_dict=False): 
     """wrapper for loading EMD data from hyperspy
     Parameters
     ----------
@@ -61,6 +64,14 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
     EDX = s[EDX_idx].data   
     xray_energies = s[EDX_idx].axes_manager.signal_axes[0].axis
 
+
+    # Show what's inside
+    pp = PrettyPrinter(width=200,depth=None,compact=False)
+    pp.pprint(s)
+
+    if return_dict:
+        EDX = s[EDX_idx]
+    
     return EDX, haadf, xray_energies
 
 
@@ -360,8 +371,99 @@ def GaussFilterCube(hsi, sigma = 2, size=3):
     return hsi_filtered
 
 
+def eval_psnr(hsi_1, hsi_2):
+    """
+    Get the channel-wise psnr between two hyperspectral cube
 
+    Returns:
+    --------
+    list of psnr values
+    """
+
+    # Get dimensions
+    h,w,b = hsi_1.shape
+
+    # Initialize list for scores
+    psnr_list = []
+
+    for k in range(b):
+        psnr_list.append(peak_signal_noise_ratio(hsi_1[:,:,k],hsi_2[:,:,k]))
+
+    return psnr_list
+        
+        
+
+def eval_psnr(hsi_1, hsi_2):
+    """
+    Get the channel-wise psnr between two hyperspectral cube
+
+    Returns:
+    --------
+    list of psnr values
+    """
+
+    # Get dimensions
+    h,w,b = hsi_1.shape
+
+    # Initialize list for scores
+    psnr_list = []
+
+    for k in range(b):
+        psnr_list.append(peak_signal_noise_ratio(hsi_1[:,:,k],hsi_2[:,:,k]))
+
+    return psnr_list
+
+
+
+
+def sam(s1, s2):
+    """
+    from pydsptools
+    Computes the spectral angle mapper between two vectors (in radians).
+
+    Parameters:
+        s1: 'numpy array'
+        s2: 'numpy array'
+
+    Returns: 'float'
+            The angle between vectors s1 and s2 in radians.
+    """
+    try:
+        s1_norm = math.sqrt(np.dot(s1, s1))
+        s2_norm = math.sqrt(np.dot(s2, s2))
+        sum_s1_s2 = np.dot(s1, s2)
+        angle = math.acos(sum_s1_s2 / (s1_norm * s2_norm))
+    except ValueError:
+        # python math don't like when acos is called with
+        # a value very near to 1
+        return 0.0
+    return angle
     
+
+def sam_perpixel(hsi_1, hsi_2):
+    """
+    Spectral angle mapper between two hyperspectral images 
+    
+    Returns:
+    --------
+    Angles in radian per pixel
+    """
+
+    # Dimensions
+    assert hsi_1.ndim ==3 and hsi_1.shape == hsi_2.shape
+    h, w, b = hsi_1.shape
+
+    # SAM array intialization
+    sam_all = np.zeros((h,w))
+
+    for i in range(h):
+        for j in range(w):
+            sam_all[i,j] = sam(hsi_1[i,j,:],hsi_2[i,j,:])
+            
+    return sam_all
+
+
+
 
 
 
