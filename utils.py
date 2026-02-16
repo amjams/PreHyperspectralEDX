@@ -1,7 +1,10 @@
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_samples
-from skimage.metrics import peak_signal_noise_ratio
+
+from skimage.metrics import peak_signal_noise_ratio as psnr
+from skimage.metrics import structural_similarity as ssim
+
 import sys
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -15,10 +18,11 @@ import tifffile as tif
 from pprint import PrettyPrinter
 
 
+def testfun():
+    ssim(np.zeros((50,50)),np.ones((50,50)),data_range=1)
 
 
-
-def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame=True, return_dict=False): 
+def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame=True, return_dict=False, verbose = False): 
     """wrapper for loading EMD data from hyperspy
     Parameters
     ----------
@@ -66,8 +70,9 @@ def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, selec
 
 
     # Show what's inside
-    pp = PrettyPrinter(width=200,depth=None,compact=False)
-    pp.pprint(s)
+    if verbose:
+        pp = PrettyPrinter(width=200,depth=None,compact=False)
+        pp.pprint(s)
 
     if return_dict:
         EDX = s[EDX_idx]
@@ -387,32 +392,35 @@ def eval_psnr(hsi_1, hsi_2):
     psnr_list = []
 
     for k in range(b):
-        psnr_list.append(peak_signal_noise_ratio(hsi_1[:,:,k],hsi_2[:,:,k]))
+        img1 = MinMax(hsi_1[:,:,k])
+        img2 = MinMax(hsi_2[:,:,k])
+        psnr_list.append(psnr(img1,img2,data_range=1.0))
 
     return psnr_list
         
         
 
-def eval_psnr(hsi_1, hsi_2):
+def eval_ssim3(hsi_1, hsi_2):
     """
-    Get the channel-wise psnr between two hyperspectral cube
-
+    Get the channel-wise SSIM between two hyperspectral cube
+    
     Returns:
     --------
-    list of psnr values
+    list of ssim values
     """
-
+    
     # Get dimensions
     h,w,b = hsi_1.shape
-
+    
     # Initialize list for scores
-    psnr_list = []
-
+    ssim_list = []
+    
     for k in range(b):
-        psnr_list.append(peak_signal_noise_ratio(hsi_1[:,:,k],hsi_2[:,:,k]))
-
-    return psnr_list
-
+        img1 = MinMax(hsi_1[:,:,k])
+        img2 = MinMax(hsi_2[:,:,k])
+        ssim_list.append(ssim(img1,img2,data_range=1.0))
+    
+    return ssim_list
 
 
 
@@ -463,6 +471,89 @@ def sam_perpixel(hsi_1, hsi_2):
     return sam_all
 
 
+
+
+def make_dark_presentation(
+    fig=None,
+    text_color="#EAEAEA",
+    grid_color="#888888",
+    grid_alpha=0.3,
+    spine_color="#EAEAEA",
+    line_width=None,
+    transparent=True,
+    black_background=False,
+):
+    """
+    from ChatGPT to export nice figures for powerpoint
+    """
+
+    if fig is None:
+        fig = plt.gcf()
+
+    # Force draw so tick labels exist
+    fig.canvas.draw()
+
+    # --- Figure background ---
+    if transparent:
+        fig.patch.set_alpha(0)
+    elif black_background:
+        fig.patch.set_facecolor("black")
+
+    for ax in fig.get_axes():
+
+        if not ax.get_visible():
+            continue
+
+        # Background
+        if transparent:
+            ax.set_facecolor("none")
+        elif black_background:
+            ax.set_facecolor("black")
+
+        # ---- SPINES ----
+        for spine in ax.spines.values():
+            spine.set_color(spine_color)
+
+        # ---- TICKS ----
+        ax.tick_params(colors=text_color, which='both')
+
+        # Offset text (e.g., 1e-3)
+        ax.xaxis.get_offset_text().set_color(text_color)
+        ax.yaxis.get_offset_text().set_color(text_color)
+
+        # ---- LABELS + TITLE ----
+        ax.title.set_color(text_color)
+        ax.xaxis.label.set_color(text_color)
+        ax.yaxis.label.set_color(text_color)
+
+        # ---- GRID (only if already enabled) ----
+        xgrid = ax.get_xgridlines()
+        ygrid = ax.get_ygridlines()
+        
+        if any(line.get_visible() for line in xgrid + ygrid):
+            for line in xgrid + ygrid:
+                line.set_color(grid_color)
+                line.set_alpha(grid_alpha)
+
+        # ---- LINES ----
+        for line in ax.get_lines():
+            if line_width is not None:
+                line.set_linewidth(line_width)
+
+        # ---- LEGEND ----
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.get_frame().set_facecolor("none")
+            legend.get_frame().set_edgecolor(spine_color)
+            for text in legend.get_texts():
+                text.set_color(text_color)
+            legend.get_title().set_color(text_color)
+
+        # ---- ALL TEXT OBJECTS (annotations etc.) ----
+        for text in ax.texts:
+            text.set_color(text_color)
+
+    return fig
 
 
 
