@@ -34,3 +34,8 @@ data/*.emd
 data/*.npz
 data/*/*.emd
 data/*/*.npz
+
+# Results
+preprocessing_basic/results
+Preprocessing_basic/tmp
+advanced_denoising/results

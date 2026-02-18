@@ -18,9 +18,6 @@ import tifffile as tif
 from pprint import PrettyPrinter
 
 
-def testfun():
-    ssim(np.zeros((50,50)),np.ones((50,50)),data_range=1)
-
 
 def load_EDX(file_path, first_frame=0, last_frame = None, sum_frames=True, select_type=None, haadf_last_frame=True, return_dict=False, verbose = False): 
     """wrapper for loading EMD data from hyperspy

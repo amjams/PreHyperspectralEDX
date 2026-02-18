@@ -379,6 +379,56 @@ class EM_EDX:
         self.EDX = bm4d(self.EDX, sigma_psd = sigma, stage_arg=BM4DStages.ALL_STAGES)
 
         return self
+
+
+    def NGMeet_matlab(self, sigma = 0.3, nEM=10, nIter=2, poisson_scaling=True):
+        """
+        Apply the NGMeet algorithm on an HSI (needs matlab
+
+        Parameters:
+        -----------
+        sigma: noise standard deviation
+        nEM: spectral subspace, i.e. number of 'endmembers'
+        when this is isn't high enough, you get baf spectral fidelity
+        nIter: number of iterations in NGMeet (2 seems enough)
+        """
+
+        # Start matlab engine and set path
+        eng = matlab.engine.start_matlab()
+        matlab_path = eng.genpath('../matlab/')   # add path recursively
+        eng.addpath(matlab_path, nargout=0)
+
+        # Set dataset to be denoised
+        hsi_noisy = np.ascontiguousarray(self.EDX)
+        hsi_noisy, min, max = MinMax(hsi_noisy, return_extra=True)
+        h,w,b = self.EDX_dim
+        
+        
+        # Optional variance stablilzation
+        if poisson_scaling:
+            G = np.mean(hsi_noisy,axis=2).reshape(h*w,1)
+            #G = np.ones_like(G)   # optional
+            H = np.mean(np.mean(hsi_noisy,axis=0),axis=0).reshape(b,-1)
+            W = G@np.transpose(H)
+            W = np.sqrt(W)    
+            hsi_noisy = np.divide(hsi_noisy,W.reshape((h,w,b)))
+
+        hsi_clean =  eng.denoiseNGMeet(hsi_noisy, 'Sigma', sigma, 'SpectralSubspace', 10,'NumIterations',2,nargout=1)
+        hsi_clean =  np.asarray(hsi_clean)
+
+
+        # Optional undo variance scaling 
+        if poisson_scaling:
+            hsi_clean = np.multiply(hsi_clean, W.reshape((h,w,b)))
+
+        # undo minmax 
+        hsi_clean = MinMaxInverse(hsi_clean, min, max)
+
+        # output
+        self.EDX = hsi_clean
+
+        return self
+        
         
 
     def sofima_align(self, hsi_stack_path, alignment, data_type,   # check the save_aligned False option
