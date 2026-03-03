@@ -35,6 +35,7 @@ data/*.emd
 data/*.npz
 data/*/*.emd
 data/*/*.npz
+data/RamanMarko
 
 # Results
 preprocessing_basic/results
