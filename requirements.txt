@@ -1,0 +1,10 @@
+numpy
+matplotlib
+scikit-learn
+scikit-image
+pacmap
+ipywidgets
+torch 
+torchmetrics
+humanfriendly
+distinctipy
