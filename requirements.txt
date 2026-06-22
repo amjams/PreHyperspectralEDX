@@ -13,7 +13,7 @@ distinctipy
 opencv-python
 bm3d
 bm4d
-matlabengine==25.2.2
+#matlabengine==25.2.2  % needs special treatment for installing on the cluster: to be continued.
 hyperspy[all]
 transformers
 jax
