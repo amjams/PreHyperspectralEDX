@@ -33,7 +33,7 @@ from advanced_denoising.pymultiscale import *
 try:      # for Habrok, where matlab hasn't been set up yet
     import matlab.engine
 except:
-    print("Matlab engine not loaded. Can't run NGMeet denoising')
+    print('Matlab engine not loaded. Cannot run NGMeet denoising')
 
 
 
