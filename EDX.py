@@ -30,7 +30,10 @@ import gc
 import tracemalloc
 
 from advanced_denoising.pymultiscale import *
-import matlab.engine
+try:      # for Habrok, where matlab hasn't been set up yet
+    import matlab.engine
+except:
+    print("Matlab engine not loaded. Can't run NGMeet denoising')
 
 
 
