@@ -12,24 +12,6 @@ file_path = "/scratch/p276451/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"  
 EDX, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True)  
 
 
-# define an instance and apply preprocessing (copy_instance defaults to false)
-tile = EM_EDX(haadf, EDX, xray_energies)
-tile = tile.apply("crop", parameters = {"crop_idx": (0,1000,0,1000,0,1000)}, notes='first operation')
-
-# summary
-print(tile.summary())
-
-
-# copy_instance set to True to define a new EM-EDX instnce (while preserving the memory of the old one)
-tile2 = tile.apply("crop", parameters={"crop_idx": (slice(0,100),slice(0,200),slice(0,1000,10))},copy_instance=True)
-print(tile2.summary())
-
-
-# Binning
-tile3 = tile.apply("binning", parameters={"dim": (500,500,250)})
-print(tile3.summary())
-
-
 # Multiple steps
 # load show dimensions
 tile = EM_EDX(haadf, EDX, xray_energies)
@@ -48,7 +30,7 @@ nps = tile.FalseColor()
 f, ax = plt.subplots(1,2,figsize=(10,5))
 ax[0].imshow(1-tile.haadf,cmap='gray')
 ax[1].imshow(nps)
-plt.show()
+#plt.show()
 
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
 plt.savefig("scratch/p276451/test.png", dpi=300, transparent=True)
