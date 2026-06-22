@@ -26,3 +26,4 @@ ipympl
 nodejs-bin
 parampacmap
 phate
+sparse   # possibly needed at Habrok

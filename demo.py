@@ -8,8 +8,8 @@ import os
 
 
 # load data
-file_path = "/scratch/p276451/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"
-EDX, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=50,sum_frames=True)
+file_path = "/scratch/p276451/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"  # 20 frames max for this file
+EDX, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True)  
 
 
 # define an instance and apply preprocessing (copy_instance defaults to false)
