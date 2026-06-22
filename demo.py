@@ -34,4 +34,4 @@ ax[1].imshow(nps)
 #plt.show()
 
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
-plt.savefig("scratch/p276451/test.png", dpi=300, transparent=True)
+plt.savefig("/scratch/p276451/test.png", dpi=300, transparent=True)
