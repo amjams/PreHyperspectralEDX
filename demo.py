@@ -6,18 +6,23 @@ from EDX import *
 import numpy as np
 import hyperspy.api as hs
 import os
+import datetime
+
 
 
 # load data
 file_path = "/scratch/p276451/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"  # 20 frames max for this file
 EDX, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True)  
 
+# create an out dictory with the name of the EMD file and the current date and time
+output_dir = "/scratch/p276451/EM_EDX_output/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
 
 # Multiple steps
 # load show dimensions
 tile = EM_EDX(haadf, EDX, xray_energies)
 print(tile.EDX_dim)
-
 
 # preprocess
 tile.apply("crop", parameters={"crop_idx": (slice(None),slice(None),slice(96,4096))})
@@ -34,4 +39,10 @@ ax[1].imshow(nps)
 #plt.show()
 
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
-plt.savefig("/scratch/p276451/test.png", dpi=300, transparent=True)
+plt.savefig(output_dir + "/test.png", dpi=300, transparent=True)
+
+# Save the EM_EDX object to a file
+save_path = output_dir + "/EM_EDX_object.pkl"
+tile.save(save_path)
+
+
