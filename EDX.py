@@ -416,7 +416,7 @@ class EM_EDX:
             W = np.sqrt(W)    
             hsi_noisy = np.divide(hsi_noisy,W.reshape((h,w,b)))
 
-        hsi_clean =  eng.denoiseNGMeet(hsi_noisy, 'Sigma', sigma, 'SpectralSubspace', 10,'NumIterations',2,nargout=1)
+        hsi_clean =  eng.denoiseNGMeet(hsi_noisy, 'Sigma', sigma, 'SpectralSubspace', 10, 'NumIterations', 2, nargout=1)
         hsi_clean =  np.asarray(hsi_clean)
 
 
