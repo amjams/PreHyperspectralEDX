@@ -6,7 +6,7 @@ from EDX import *
 import numpy as np
 import hyperspy.api as hs
 import os
-import datetime
+from datetime import datetime 
 
 
 
