@@ -7,6 +7,7 @@ import numpy as np
 import hyperspy.api as hs
 import os
 from datetime import datetime 
+import pickle
 
 
 
@@ -37,12 +38,14 @@ f, ax = plt.subplots(1,2,figsize=(10,5))
 ax[0].imshow(1-tile.haadf,cmap='gray')
 ax[1].imshow(nps)
 #plt.show()
-
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
 plt.savefig(output_dir + "/test.png", dpi=300, transparent=True)
 
+
+
 # Save the EM_EDX object to a file
-save_path = output_dir + "/EM_EDX_object.pkl"
-tile.save(save_path)
+save_path = output_dir + "/EM_EDX_object_binned_meanfiltered.pkl"
+with open(save_path, "wb") as f:
+    pickle.dump(tile, f)
 
 
