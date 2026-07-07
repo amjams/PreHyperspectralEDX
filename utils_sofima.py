@@ -231,10 +231,10 @@ def get_alignment(haadf_stack,
         
         for z in tqdm(range(f2.shape[1])):
         # Upsample and scale spatial components.
-        resampled = map_utils.resample_map(
-            f2[:, z:z + 1, ...],  #
-            box2x, box1x, 1 / scale, 1)
-        f2_hires[:, z:z + 1, ...] = resampled / scale
+            resampled = map_utils.resample_map(
+                f2[:, z:z + 1, ...],  #
+                box2x, box1x, 1 / scale, 1)
+            f2_hires[:, z:z + 1, ...] = resampled / scale
 
         final_flow = flow_utils.reconcile_flows((f1, f2_hires), max_gradient=0, max_deviation=20, min_patch_size=400)
 
