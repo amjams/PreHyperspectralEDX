@@ -116,7 +116,7 @@ plt.savefig(output_dir + "/visualization_of_aligning_haadf.png", dpi=300, transp
 # Save the alignment object
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 save_path = output_dir + "_sof_object.pkl"
-with open(, "wb") as f:
+with open(save_path, "wb") as f:
     pickle.dump(sof_obj, f)
 
 
