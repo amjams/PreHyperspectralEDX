@@ -257,13 +257,13 @@ def get_alignment(haadf_stack,
             origin = jnp.array([0., 0.])
         
             for z in tqdm(range(0, final_flow.shape[1])):
-            prev = map_utils.compose_maps_fast(final_flow[:, z:z+1, ...], origin, stride,
-                                                solved[-1], origin, stride)
-        
-            x = np.zeros_like(solved[0])
-            x, e_kin, num_steps = mesh.relax_mesh(x, prev, config)
-            x = np.array(x)
-            solved.append(x)
+                prev = map_utils.compose_maps_fast(final_flow[:, z:z+1, ...], origin, stride,
+                                                    solved[-1], origin, stride)
+            
+                x = np.zeros_like(solved[0])
+                x, e_kin, num_steps = mesh.relax_mesh(x, prev, config)
+                x = np.array(x)
+                solved.append(x)
         
         solved = np.concatenate(solved, axis=1)
 
