@@ -2,6 +2,7 @@
 
 import sys, os
 from utils import *
+from utils_sofima import *
 from EDX import *
 import numpy as np
 import hyperspy.api as hs
@@ -14,6 +15,7 @@ import pickle
 # load data
 file_path = "/scratch/p276451/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"  # 20 frames max for this file
 EDX, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True)  
+
 
 # create an out dictory with the name of the EMD file and the current date and time
 output_dir = "/scratch/p276451/EM_EDX_output/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -39,8 +41,83 @@ ax[0].imshow(1-tile.haadf,cmap='gray')
 ax[1].imshow(nps)
 #plt.show()
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
-plt.savefig(output_dir + "/test.png", dpi=300, transparent=True)
+plt.savefig(output_dir + "/haadf_NPS_after_binning_meanfiltering.png", dpi=300, transparent=True)
 
+
+####### SOFIMA ALIGNMENT ########
+# load and preprocess
+num_frames = 20
+_, haadf_stack, _ = load_EDX(file_path, first_frame=0, last_frame=num_frames, sum_frames=True, haadf_last_frame=False)
+
+sof_obj = get_alignment(haadf_stack, 
+                  n_align = num_frames,
+                  min_peak_ratio=1.1, 
+                  min_peak_sharpness=1.1,
+                  max_magnitude=0, 
+                  max_deviation=0,
+                  patch_size = 100,
+                  stride = 25,
+                  pad_remove = 50,
+                  align_to_zero = True)
+
+# Apply the alignment on the HAADF stack
+haadf_stack_aligned = apply_alignment_2D(haadf_stack, sof_obj, 'uint8')
+
+
+
+# Ensure the stacks have matched dimensions
+pad_remove = sof_obj.pad_remove
+haadf_stack = np.transpose(haadf_stack,[1,2,0])[pad_remove:2048-pad_remove,pad_remove:2048-pad_remove, :num_frames].astype('uint8')
+
+# Evaluate the alignment
+pcc_before, pcc_after = eval_alignment(haadf_stack, haadf_stack_aligned)
+print('Pearson coeffients before and after: ', np.mean(pcc_before), np.mean(pcc_after))
+
+
+zoom = (slice(1300,1750),slice(1300,1750))
+
+f, ax = plt.subplots(2,3,figsize=(15,10))
+ax[0][0].imshow(haadf_stack[:,:,:num_frames].sum(axis=2),cmap='gray_r')
+ax[0][1].imshow(haadf_stack_aligned[:,:,:num_frames].sum(axis=2),cmap='gray_r')
+ax[0][2].imshow(haadf_stack[:,:,-1],cmap='gray_r')
+
+ax[0][0].set_title('Unaligned',fontsize=20)
+ax[0][1].set_title('Aligned',fontsize=20)
+ax[0][2].set_title('Single frame',fontsize=20)
+
+ax[1][0].imshow(haadf_stack.sum(axis=2)[zoom],cmap='gray_r')
+ax[1][1].imshow(haadf_stack_aligned.sum(axis=2)[zoom],cmap='gray_r')
+ax[1][2].imshow(haadf_stack[:,:,-1][zoom],cmap='gray_r')
+
+
+ # Extract rectangle from zoom slices
+ys, xs = zoom
+y0 = ys.start or 0
+y1 = ys.stop or haadf_stack[:,:,:20].sum(axis=2).shape[0]
+x0 = xs.start or 0
+x1 = xs.stop or haadf_stack_aligned[:,:,:20].sum(axis=2).shape[1]
+
+
+ax[0][0].add_patch(patches.Rectangle((x0, y0), x1 - x0, y1 - y0,
+                      linewidth=1, edgecolor='white', facecolor='none'))
+ax[0][1].add_patch(patches.Rectangle((x0, y0), x1 - x0, y1 - y0,
+                      linewidth=1, edgecolor='white', facecolor='none'))
+ax[0][2].add_patch(patches.Rectangle((x0, y0), x1 - x0, y1 - y0,
+                      linewidth=1, edgecolor='white', facecolor='none'))
+
+for a in ax.ravel():
+    a.axis('off')
+
+make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
+plt.savefig(output_dir + "/visualization_of_aligning_haadf.png", dpi=300, transparent=True)
+
+
+
+# Save the alignment object
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_path = output_dir + "_sof_object.pkl"
+with open(, "wb") as f:
+    pickle.dump(sof_obj, f)
 
 
 # Save the EM_EDX object to a file
