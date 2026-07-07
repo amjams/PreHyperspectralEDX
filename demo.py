@@ -14,7 +14,7 @@ import pickle
 
 # load data
 file_path = "/scratch/p276451/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"  # 20 frames max for this file
-EDX, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True)  
+EDX, haadf_stack, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True, haadf_last_frame=False)
 
 
 # create an out dictory with the name of the EMD file and the current date and time
@@ -24,6 +24,7 @@ if not os.path.exists(output_dir):
 
 # Multiple steps
 # load show dimensions
+haadf = haadf_stack[0,:,:]
 tile = EM_EDX(haadf, EDX, xray_energies)
 print(tile.EDX_dim)
 
@@ -47,8 +48,6 @@ plt.savefig(output_dir + "/haadf_NPS_after_binning_meanfiltering.png", dpi=300, 
 ####### SOFIMA ALIGNMENT ########
 # load and preprocess
 num_frames = 20
-_, haadf_stack, _ = load_EDX(file_path, first_frame=0, last_frame=num_frames, sum_frames=True, haadf_last_frame=False)
-
 sof_obj = get_alignment(haadf_stack, 
                   n_align = num_frames,
                   min_peak_ratio=1.1, 
@@ -62,7 +61,6 @@ sof_obj = get_alignment(haadf_stack,
 
 # Apply the alignment on the HAADF stack
 haadf_stack_aligned = apply_alignment_2D(haadf_stack, sof_obj, 'uint8')
-
 
 
 # Ensure the stacks have matched dimensions
