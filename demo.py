@@ -57,10 +57,11 @@ sof_obj = get_alignment(haadf_stack,
                   patch_size = 100,
                   stride = 25,
                   pad_remove = 50,
+                  tmp_dir= output_dir + 'tmp', 
                   align_to_zero = True)
 
 # Apply the alignment on the HAADF stack
-haadf_stack_aligned = apply_alignment_2D(haadf_stack, sof_obj, 'uint8')
+haadf_stack_aligned = apply_alignment_2D(haadf_stack, sof_obj, 'uint8', tmp_dir= output_dir + 'tmp')
 
 
 # Ensure the stacks have matched dimensions

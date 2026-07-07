@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import tensorstore as ts
 import tempfile
 import pathlib
+import shutil
 
 from connectomics.common import bounding_box
 from sofima import flow_field
@@ -99,6 +100,7 @@ def get_alignment(haadf_stack,
                   patch_size = 100,
                   stride = 25,
                   pad_remove = 0,
+                  tmp_dir = None,
                   align_to_zero=False):
                   
     """ Get SOFIMA transformation
@@ -114,6 +116,7 @@ def get_alignment(haadf_stack,
         max_deviation: for filtering the flow values (see ref)
         patch_size: XY spatial context used for flow field estimation
         stride: XY distance between centers of adjacent patches.
+        tmp_dir: scratch directory to save the TensorStore tmp files
         
         Output
         ----------
@@ -147,131 +150,139 @@ def get_alignment(haadf_stack,
     
     
     # Create the TensorStore objects for the stacks of images.
-    with tempfile.TemporaryDirectory() as tmp_root:
-        tmp_root = pathlib.Path(tmp_root)
 
-        ds1_path = tmp_root/"dataset1"
-        ds2_path = tmp_root/"dataset2"
+    tmp_root = pathlib.Path(tempfile.mkdtemp(dir=tmp_dir))
+    try:
+        ds1_path = tmp_root / "dataset1"
+        ds2_path = tmp_root / "dataset2"
 
-    
-    unaligned_1x = ts.open({
-        'driver': 'n5',
-        'kvstore': {
-             'driver': 'file',
-             'path': str(ds1_path),
-         },
-         'metadata': {
-             'compression': {
-                 'type': 'gzip'
-             },
-             'dataType': 'uint8',
-             'dimensions': data_1x.shape,
-             'blockSize': [100, 100, 1, 1],
-         },
-         'create': True,
-         'delete_existing': True,}).result()
-    
-    unaligned_2x = ts.open({
-        'driver': 'n5',
-        'kvstore': {
-             'driver': 'file',
-             'path': str(ds2_path),
-         },
-         'metadata': {
-             'compression': {
-                 'type': 'gzip'
-             },
-             'dataType': 'uint8',
-             'dimensions': data_2x.shape,
-             'blockSize': [50, 50, 1, 1],
-         },
-         'create': True,
-         'delete_existing': True,}).result()
-    
-    write_future = unaligned_1x.write(data_1x); write_future.result()
-    write_future = unaligned_2x.write(data_2x); write_future.result()
-    
-    # Estimate flows
-    flows1x = np.array(_compute_flow(unaligned_1x, patch_size, stride))
-    flows2x = np.array(_compute_flow(unaligned_2x, patch_size, stride))
+        #with tempfile.TemporaryDirectory() as tmp_root:
+        #    tmp_root = pathlib.Path(tmp_root)
 
-    # Convert to [channels, z, y, x].
-    flows2x = np.transpose(flows2x, [1, 0, 2, 3])
-    flows1x = np.transpose(flows1x, [1, 0, 2, 3])
+        #    ds1_path = tmp_root/"dataset1"
+        #    ds2_path = tmp_root/"dataset2"
 
-    # Pad to account for the edges of the images where there is insufficient context to estimate flow.
-    pad = patch_size // 2 // stride
-    flows1x = np.pad(flows1x, [[0, 0], [0, 0], [pad, pad], [pad, pad]], constant_values=np.nan)
-    flows2x = np.pad(flows2x, [[0, 0], [0, 0], [pad, pad], [pad, pad]], constant_values=np.nan)
-
-    # Remove uncertain flows
-    f1 = flow_utils.clean_flow(flows1x, min_peak_ratio=min_peak_ratio, min_peak_sharpness=min_peak_sharpness, max_magnitude=max_magnitude, max_deviation=max_deviation)
-    f2 = flow_utils.clean_flow(flows1x, min_peak_ratio=min_peak_ratio, min_peak_sharpness=min_peak_sharpness, max_magnitude=max_magnitude, max_deviation=max_deviation)
-
-
-    # Interpolate
-    f2_hires = np.zeros_like(f1)
-    
-    scale = 0.5
-    oy, ox = np.ogrid[:f2.shape[-2], :f2.shape[-1]]
-    oy = oy.ravel() / scale
-    ox = ox.ravel() / scale
-    
-    box1x = bounding_box.BoundingBox(start=(0, 0, 0), size=(f1.shape[-1], f1.shape[-2], 1))
-    box2x = bounding_box.BoundingBox(start=(0, 0, 0), size=(f2.shape[-1], f2.shape[-2], 1))
-    
-    for z in tqdm(range(f2.shape[1])):
-      # Upsample and scale spatial components.
-      resampled = map_utils.resample_map(
-          f2[:, z:z + 1, ...],  #
-          box2x, box1x, 1 / scale, 1)
-      f2_hires[:, z:z + 1, ...] = resampled / scale
-
-    final_flow = flow_utils.reconcile_flows((f1, f2_hires), max_gradient=0, max_deviation=20, min_patch_size=400)
-
-    # mesh optimzation
-    config = mesh.IntegrationConfig(dt=0.001, gamma=0.0, k0=0.01, k=0.1, stride=(stride, stride), num_iters=1000,
-                                max_iters=100000, stop_v_max=0.005, dt_max=1000, start_cap=0.01,
-                                final_cap=10, prefer_orig_order=True)
-
-
-    if align_to_zero:
-        solved = [np.zeros_like(final_flow[:, 0:1, ...])]   # slice 0 fixed
-        for z in tqdm(range(final_flow.shape[1])):
-            target = final_flow[:, z:z+1, ...]
         
-            x0 = np.zeros_like(target)    # initial guess
-            x, _, _ = mesh.relax_mesh(x0, target, config)
-            solved.append(np.array(x)) 
-    else:
-        solved = [np.zeros_like(final_flow[:, 0:1, ...])]
-        origin = jnp.array([0., 0.])
-    
-        for z in tqdm(range(0, final_flow.shape[1])):
-          prev = map_utils.compose_maps_fast(final_flow[:, z:z+1, ...], origin, stride,
-                                             solved[-1], origin, stride)
-    
-          x = np.zeros_like(solved[0])
-          x, e_kin, num_steps = mesh.relax_mesh(x, prev, config)
-          x = np.array(x)
-          solved.append(x)
-    
-    solved = np.concatenate(solved, axis=1)
+        unaligned_1x = ts.open({
+            'driver': 'n5',
+            'kvstore': {
+                'driver': 'file',
+                'path': str(ds1_path),
+            },
+            'metadata': {
+                'compression': {
+                    'type': 'gzip'
+                },
+                'dataType': 'uint8',
+                'dimensions': data_1x.shape,
+                'blockSize': [100, 100, 1, 1],
+            },
+            'create': True,
+            'delete_existing': True,}).result()
+        
+        unaligned_2x = ts.open({
+            'driver': 'n5',
+            'kvstore': {
+                'driver': 'file',
+                'path': str(ds2_path),
+            },
+            'metadata': {
+                'compression': {
+                    'type': 'gzip'
+                },
+                'dataType': 'uint8',
+                'dimensions': data_2x.shape,
+                'blockSize': [50, 50, 1, 1],
+            },
+            'create': True,
+            'delete_existing': True,}).result()
+        
+        write_future = unaligned_1x.write(data_1x); write_future.result()
+        write_future = unaligned_2x.write(data_2x); write_future.result()
+        
+        # Estimate flows
+        flows1x = np.array(_compute_flow(unaligned_1x, patch_size, stride))
+        flows2x = np.array(_compute_flow(unaligned_2x, patch_size, stride))
+
+        # Convert to [channels, z, y, x].
+        flows2x = np.transpose(flows2x, [1, 0, 2, 3])
+        flows1x = np.transpose(flows1x, [1, 0, 2, 3])
+
+        # Pad to account for the edges of the images where there is insufficient context to estimate flow.
+        pad = patch_size // 2 // stride
+        flows1x = np.pad(flows1x, [[0, 0], [0, 0], [pad, pad], [pad, pad]], constant_values=np.nan)
+        flows2x = np.pad(flows2x, [[0, 0], [0, 0], [pad, pad], [pad, pad]], constant_values=np.nan)
+
+        # Remove uncertain flows
+        f1 = flow_utils.clean_flow(flows1x, min_peak_ratio=min_peak_ratio, min_peak_sharpness=min_peak_sharpness, max_magnitude=max_magnitude, max_deviation=max_deviation)
+        f2 = flow_utils.clean_flow(flows1x, min_peak_ratio=min_peak_ratio, min_peak_sharpness=min_peak_sharpness, max_magnitude=max_magnitude, max_deviation=max_deviation)
+
+
+        # Interpolate
+        f2_hires = np.zeros_like(f1)
+        
+        scale = 0.5
+        oy, ox = np.ogrid[:f2.shape[-2], :f2.shape[-1]]
+        oy = oy.ravel() / scale
+        ox = ox.ravel() / scale
+        
+        box1x = bounding_box.BoundingBox(start=(0, 0, 0), size=(f1.shape[-1], f1.shape[-2], 1))
+        box2x = bounding_box.BoundingBox(start=(0, 0, 0), size=(f2.shape[-1], f2.shape[-2], 1))
+        
+        for z in tqdm(range(f2.shape[1])):
+        # Upsample and scale spatial components.
+        resampled = map_utils.resample_map(
+            f2[:, z:z + 1, ...],  #
+            box2x, box1x, 1 / scale, 1)
+        f2_hires[:, z:z + 1, ...] = resampled / scale
+
+        final_flow = flow_utils.reconcile_flows((f1, f2_hires), max_gradient=0, max_deviation=20, min_patch_size=400)
+
+        # mesh optimzation
+        config = mesh.IntegrationConfig(dt=0.001, gamma=0.0, k0=0.01, k=0.1, stride=(stride, stride), num_iters=1000,
+                                    max_iters=100000, stop_v_max=0.005, dt_max=1000, start_cap=0.01,
+                                    final_cap=10, prefer_orig_order=True)
+
+
+        if align_to_zero:
+            solved = [np.zeros_like(final_flow[:, 0:1, ...])]   # slice 0 fixed
+            for z in tqdm(range(final_flow.shape[1])):
+                target = final_flow[:, z:z+1, ...]
+            
+                x0 = np.zeros_like(target)    # initial guess
+                x, _, _ = mesh.relax_mesh(x0, target, config)
+                solved.append(np.array(x)) 
+        else:
+            solved = [np.zeros_like(final_flow[:, 0:1, ...])]
+            origin = jnp.array([0., 0.])
+        
+            for z in tqdm(range(0, final_flow.shape[1])):
+            prev = map_utils.compose_maps_fast(final_flow[:, z:z+1, ...], origin, stride,
+                                                solved[-1], origin, stride)
+        
+            x = np.zeros_like(solved[0])
+            x, e_kin, num_steps = mesh.relax_mesh(x, prev, config)
+            x = np.array(x)
+            solved.append(x)
+        
+        solved = np.concatenate(solved, axis=1)
 
 
 
-    # Warping
-    crop_size = 2048 - 2*pad_remove
-    inv_map = map_utils.invert_map(solved, box1x, box1x, stride)
+        # Warping
+        crop_size = 2048 - 2*pad_remove
+        inv_map = map_utils.invert_map(solved, box1x, box1x, stride)
 
-    # output
-    out = sofima_alignment(inv_map, n_align, min_peak_ratio, min_peak_sharpness,
-                       max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x, align_to_zero)
+        # output
+        out = sofima_alignment(inv_map, n_align, min_peak_ratio, min_peak_sharpness,
+                        max_magnitude, max_deviation, patch_size, stride, pad_remove, box1x, align_to_zero)
 
-    return out
+        return out
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
 
 
-def apply_alignment_2D(img_stack, alignment, data_type):
+def apply_alignment_2D(img_stack, alignment, data_type, tmp_dir=None):
     """
     Apply a sofima alignment on a single stack of images
 
@@ -280,6 +291,7 @@ def apply_alignment_2D(img_stack, alignment, data_type):
     img_stack: stack of images to apply the alignment to (n_frames, height, width)
     alignment: the alignment object
     data_type: of the input and output
+    tmp_dir: scratch directory to save the TensorStore tmp files
 
     Returns:
     img_stack_alligned: (height, width, n_frames)
@@ -303,55 +315,55 @@ def apply_alignment_2D(img_stack, alignment, data_type):
         for i in range(data_1x.shape[2]):
             data_1x[:,:,i,0] = Normalize_uint8(data_1x[:,:,i,0]) #,normalize_by=data_1x[:,:,:,0]) #you can normalize by the whole stack
         data_1x = data_1x.astype('uint8')
-
+  
     
-    
-    # Create the TensorStore objects for the stacks of images.
-    with tempfile.TemporaryDirectory() as tmp_root:
-        tmp_root = pathlib.Path(tmp_root)
+    # Create the TensorStore objects for the stacks of images.    
+    tmp_root = pathlib.Path(tempfile.mkdtemp(dir=tmp_dir))
+    try:
         ds1_path = tmp_root/"dataset1"
 
-    
-    unaligned_1x = ts.open({
-        'driver': 'n5',
-        'kvstore': {
-             'driver': 'file',
-             'path': str(ds1_path),
-         },
-         'metadata': {
-             'compression': {
-                 'type': 'gzip'
-             },
-             'dataType': data_type,
-             'dimensions': data_1x.shape,
-             'blockSize': [100, 100, 1, 1],
-         },
-         'create': True,
-         'delete_existing': True,}).result()
+        unaligned_1x = ts.open({
+            'driver': 'n5',
+            'kvstore': {
+                'driver': 'file',
+                'path': str(ds1_path),
+            },
+            'metadata': {
+                'compression': {
+                    'type': 'gzip'
+                },
+                'dataType': data_type,
+                'dimensions': data_1x.shape,
+                'blockSize': [100, 100, 1, 1],
+            },
+            'create': True,
+            'delete_existing': True,}).result()
 
-    write_future = unaligned_1x.write(data_1x)
-    write_future.result()
-    
-    # Initialize warped list with cropped frame 0
-    warped = [np.transpose(unaligned_1x[pad_remove:2048-pad_remove,pad_remove:2048-pad_remove,0:1,0].read().result(),[2, 1, 0])]
-    
-    for z in tqdm(range(1, unaligned_1x.shape[2])):
-    
-        data_box = bounding_box.BoundingBox(start=(0, 0, 0),size=(2048, 2048, 1))
-        out_box = bounding_box.BoundingBox(start=(pad_remove, pad_remove, 0),size=(crop_size, crop_size, 1))
-        data = np.transpose(unaligned_1x[data_box.start[0]:data_box.end[0],data_box.start[1]:data_box.end[1],z:z+1,0:1].read().result(),[3, 2, 1, 0])
-    
-        warped_slice = warp.warp_subvolume(data,data_box,inv_map[:, z:z+1, ...],box1x,stride,
-            out_box,
-            'lanczos',
-            parallelism=1
-        )[0, ...]
-    
-        warped.append(warped_slice)
-    
-    img_stack_aligned = np.transpose(np.concatenate(warped, axis=0), [2, 1, 0])
+        write_future = unaligned_1x.write(data_1x)
+        write_future.result()
+        
+        # Initialize warped list with cropped frame 0
+        warped = [np.transpose(unaligned_1x[pad_remove:2048-pad_remove,pad_remove:2048-pad_remove,0:1,0].read().result(),[2, 1, 0])]
+        
+        for z in tqdm(range(1, unaligned_1x.shape[2])):
+        
+            data_box = bounding_box.BoundingBox(start=(0, 0, 0),size=(2048, 2048, 1))
+            out_box = bounding_box.BoundingBox(start=(pad_remove, pad_remove, 0),size=(crop_size, crop_size, 1))
+            data = np.transpose(unaligned_1x[data_box.start[0]:data_box.end[0],data_box.start[1]:data_box.end[1],z:z+1,0:1].read().result(),[3, 2, 1, 0])
+        
+            warped_slice = warp.warp_subvolume(data,data_box,inv_map[:, z:z+1, ...],box1x,stride,
+                out_box,
+                'lanczos',
+                parallelism=1
+            )[0, ...]
+        
+            warped.append(warped_slice)
+        
+        img_stack_aligned = np.transpose(np.concatenate(warped, axis=0), [2, 1, 0])
 
-    return img_stack_aligned
+        return img_stack_aligned
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True) 
     
 
 
