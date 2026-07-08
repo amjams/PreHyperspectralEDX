@@ -9,6 +9,8 @@ import hyperspy.api as hs
 import os
 from datetime import datetime 
 import pickle
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 
 
 
