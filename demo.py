@@ -125,15 +125,25 @@ with open(save_path, "wb") as f:
 
 
 # Save the EM_EDX object to a file
-save_path = output_dir + "/EM_EDX_object_binned_meanfiltered.pkl"
-with open(save_path, "wb") as f:
-    pickle.dump(tile, f)
+#save_path = output_dir + "/EM_EDX_object_binned_meanfiltered.pkl"
+#with open(save_path, "wb") as f:
+#    pickle.dump(tile, f)
 
 
 # Memory management
 del haadf_stack, haadf_stack_aligned
 gc.collect()
 
+
+## Create another EMD object
+tile_1 = EM_EDX(haadf, EDX, xray_energies)
+tile_1.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
+tile_1.apply("binning", parameters={"dim": (2048, 2048, 250)})
+print('Unaligned object created')
+
+# Memory management
+del EDX, haadf 
+gc.collect()
 
 
 # Saving with TensorStore the unaligned EDX frames 
@@ -144,17 +154,6 @@ save_path = output_dir + "/tmp/unaligned_hsi"
 tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames)
 print("The unaligned HSI has been stored in: %s " % save_path)
 
-
-
-## Create another EMD object
-tile_1 = EM_EDX(haadf, EDX, xray_energies)
-tile_1.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
-tile_1.apply("binning", parameters={"dim": (2048, 2048, 250)})
-print('Unaligned object created')
-
-
-del EDX, haadf 
-gc.collect()
 
 # Align
 tile_1.apply("sofima_align", 
