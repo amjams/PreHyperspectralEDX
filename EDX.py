@@ -483,9 +483,9 @@ class EM_EDX:
             img_stack_aligned_summed = img_stack_aligned.sum(axis=2)
             hsi_summed_aligned[pad_remove:h-pad_remove, pad_remove:w-pad_remove,k] = img_stack_aligned_summed
 
-            # Measure memory usage before deletion
-            tracemalloc.start()
-            snapshot1 = tracemalloc.take_snapshot()
+            # Measure memory usage before deletion (commenting because possibly useless overhead)
+            #tracemalloc.start()
+            #snapshot1 = tracemalloc.take_snapshot()
             
             # memory tricks that might not work
             del img_stack, img_stack_reshaped, img_stack_aligned, img_stack_aligned_summed
@@ -493,10 +493,10 @@ class EM_EDX:
             # Force garbage collection to ensure memory release
             gc.collect()
             
-            # Measure memory usage after deletion
-            snapshot2 = tracemalloc.take_snapshot()
-            stats = snapshot2.compare_to(snapshot1, 'lineno')
-            print(f"Released memory: {stats[0].size_diff / 10**6:.2f} MB")
+            # Measure memory usage after deletion (commenting because possibly useless overhead)
+            #snapshot2 = tracemalloc.take_snapshot()
+            #stats = snapshot2.compare_to(snapshot1, 'lineno')
+            #print(f"Released memory: {stats[0].size_diff / 10**6:.2f} MB")
             
             
             # Optional: write to in-RAM aligned stack with NaN padding
