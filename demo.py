@@ -157,7 +157,7 @@ print("The unaligned HSI has been stored in: %s " % save_path)
 
 # Align
 tile_1.apply("sofima_align", 
-             parameters={"hsi_stack_path": "tmp/unaligned_hsi20230930 0546 12000 x 2023-146_20frames_align2zero",
+             parameters={"hsi_stack_path": save_path,
                           "alignment": sof_obj, 
                           "data_type": "float32",
                           "save_aligned": False, 
