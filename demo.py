@@ -11,6 +11,7 @@ from datetime import datetime
 import pickle
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import gc
 
 
 
@@ -116,7 +117,7 @@ plt.savefig(output_dir + "/visualization_of_aligning_haadf.png", dpi=300, transp
 
 # Save the alignment object
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-save_path = output_dir + "_sof_object.pkl"
+save_path = output_dir + "/sof_object.pkl"
 with open(save_path, "wb") as f:
     pickle.dump(sof_obj, f)
 
@@ -127,3 +128,48 @@ with open(save_path, "wb") as f:
     pickle.dump(tile, f)
 
 
+
+# Saving with TensorStore the unaligned EDX frames 
+import logging
+logging.getLogger("rsciio.emd").setLevel(logging.ERROR)
+
+save_path = file_path,output_dir+'/tmp/unaligned_hsi'
+tmp = store_unaligned_hsi_alt(file_path,save_path,n_frames=num_frames)
+print("The unaligned HSI has been stored in: %s " % save_path)
+
+
+# Memory management
+del tile, haadf_stack_aligned, haadf_stack
+gc.collect()
+
+## Create two EMD objects, one aligned, one not
+
+# 1) load data again from EMD
+edx_unaligned, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=num_frames, sum_frames=True, haadf_last_frame= False)
+
+# 2) Unaligned EM-EDX object, binned
+tile_1 = EM_EDX(haadf[0,:,:], edx_unaligned, xray_energies)
+tile_1.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
+tile_1.apply("binning", parameters={"dim": (2048, 2048, 250)})
+print('Unaligned object created')
+
+# 3) Aligned
+pad_remove = sof_obj.pad_remove
+tile_2 = EM_EDX(haadf[0,:,:], edx_unaligned, xray_energies)
+tile_2.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
+tile_2.apply("binning", parameters={"dim": (2048, 2048, 250)})
+
+# Align
+tile_2.apply("sofima_align", 
+             parameters={"hsi_stack_path": "tmp/unaligned_hsi20230930 0546 12000 x 2023-146_20frames_align2zero",
+                          "alignment": sof_obj, 
+                          "data_type": "float32",
+                          "save_aligned": False, 
+                          "hsi_stack_aligned_path": None})   
+
+
+# Save the aligned EM-EDX tile
+# Save the EM_EDX object to a file
+save_path = output_dir + "/EM_EDX_object_SpectrallyBinned_SofimaAligned.pkl"
+with open(save_path, "wb") as f:
+    pickle.dump(tile_2, f)
