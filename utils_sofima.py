@@ -485,7 +485,7 @@ def store_unaligned_hsi_alt(emd_path, out_path, n_frames):  # improved by GPT
     store[:, :, 0, :].write(edx_tmp.astype(np.float32)).result()
 
     # memory debug
-    ss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+    rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
     print(f"frame 01/{n_frames}: RSS = {rss_gb:.2f} GB", flush=True)
 
 
