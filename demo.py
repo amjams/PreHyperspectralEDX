@@ -46,6 +46,7 @@ ax[1].imshow(nps)
 #plt.show()
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
 plt.savefig(output_dir + "/haadf_NPS_after_binning_meanfiltering.png", dpi=300, transparent=True)
+plt.close(f)
 
 
 ####### SOFIMA ALIGNMENT ########
@@ -112,6 +113,7 @@ for a in ax.ravel():
 
 make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
 plt.savefig(output_dir + "/visualization_of_aligning_haadf.png", dpi=300, transparent=True)
+plt.close(f)
 
 
 
@@ -128,6 +130,11 @@ with open(save_path, "wb") as f:
     pickle.dump(tile, f)
 
 
+# Memory management
+del haadf_stack, haadf_stack_aligned
+gc.collect()
+
+
 
 # Saving with TensorStore the unaligned EDX frames 
 import logging
@@ -138,29 +145,19 @@ tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames)
 print("The unaligned HSI has been stored in: %s " % save_path)
 
 
-# Memory management
-del tile, haadf_stack_aligned, haadf_stack
-gc.collect()
 
-## Create two EMD objects, one aligned, one not
-
-# 1) load data again from EMD
-edx_unaligned, haadf, xray_energies = load_EDX(file_path, first_frame=0, last_frame=num_frames, sum_frames=True, haadf_last_frame= False)
-
-# 2) Unaligned EM-EDX object, binned
-tile_1 = EM_EDX(haadf[0,:,:], edx_unaligned, xray_energies)
+## Create another EMD object
+tile_1 = EM_EDX(haadf, EDX, xray_energies)
 tile_1.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
 tile_1.apply("binning", parameters={"dim": (2048, 2048, 250)})
 print('Unaligned object created')
 
-# 3) Aligned
-pad_remove = sof_obj.pad_remove
-tile_2 = EM_EDX(haadf[0,:,:], edx_unaligned, xray_energies)
-tile_2.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
-tile_2.apply("binning", parameters={"dim": (2048, 2048, 250)})
+
+del EDX, haadf 
+gc.collect()
 
 # Align
-tile_2.apply("sofima_align", 
+tile_1.apply("sofima_align", 
              parameters={"hsi_stack_path": "tmp/unaligned_hsi20230930 0546 12000 x 2023-146_20frames_align2zero",
                           "alignment": sof_obj, 
                           "data_type": "float32",
@@ -172,4 +169,4 @@ tile_2.apply("sofima_align",
 # Save the EM_EDX object to a file
 save_path = output_dir + "/EM_EDX_object_SpectrallyBinned_SofimaAligned.pkl"
 with open(save_path, "wb") as f:
-    pickle.dump(tile_2, f)
+    pickle.dump(tile_1, f)
