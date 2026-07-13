@@ -11,6 +11,7 @@ import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
 from utils import *
 os.environ["JAX_PLATFORM_NAME"] = "cpu"  # change this to your convenience
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"  # don't retain a high-water-mark arena; return freed memory to the OS
 
 import jax
 import jax.numpy as jnp
