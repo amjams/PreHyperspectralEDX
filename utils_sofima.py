@@ -34,7 +34,7 @@ import time
 from scipy import interpolate
 from scipy.stats import pearsonr
 from EDX import *
-
+import resource
 
 class sofima_alignment:
 
@@ -484,6 +484,11 @@ def store_unaligned_hsi_alt(emd_path, out_path, n_frames):  # improved by GPT
     # ---- Write frame 0 ----
     store[:, :, 0, :].write(edx_tmp.astype(np.float32)).result()
 
+    # memory debug
+    ss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+    print(f"frame 01/{n_frames}: RSS = {rss_gb:.2f} GB", flush=True)
+
+
     # ---- Stream remaining frames ----
     for k in range(1, n_frames):
         edx_tmp, _, _ = load_EDX(
@@ -499,6 +504,11 @@ def store_unaligned_hsi_alt(emd_path, out_path, n_frames):  # improved by GPT
         store[:, :, k, :].write(edx_tmp.astype(np.float32)).result()
 
         print(f"Loaded frame {k+1:02d}/{n_frames:02d}", end="\r")
+
+        # memory debug
+        rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+        print(f"frame {k+1:02d}/{n_frames:02d}: RSS = {rss_gb:.2f} GB", flush=True)
+
 
     print("\nAll frames stored.")
     return store
