@@ -447,7 +447,7 @@ def store_unaligned_hsi(emd_path, out_path, n_frames):
     return store
 
 
-def store_unaligned_hsi_alt(emd_path, out_path, n_frames):  # improved by GPT
+def store_unaligned_hsi_alt(emd_path, out_path, n_frames, data_type="float32"):  # improved by GPT
 
     out_path = pathlib.Path(out_path)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -473,7 +473,7 @@ def store_unaligned_hsi_alt(emd_path, out_path, n_frames):  # improved by GPT
         },
         "metadata": {
             "compression": {"type": "gzip"},
-            "dataType": "float32",
+            "dataType": data_type,
             "dimensions": [h, w, n_frames, b],
             "blockSize": [64, 64, 1, b],  # frame-aligned chunks
         },

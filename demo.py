@@ -29,25 +29,25 @@ if not os.path.exists(output_dir):
 # Multiple steps
 # load show dimensions
 haadf = haadf_stack[0,:,:]
-tile = EM_EDX(haadf, EDX, xray_energies)
-print(tile.EDX_dim)
+#tile = EM_EDX(haadf, EDX, xray_energies)
+#print(tile.EDX_dim)
 
 # preprocess
-tile.apply("crop", parameters={"crop_idx": (slice(None),slice(None),slice(96,4096))})
-tile.apply("binning", parameters={"dim": (1024,1024,250)})
-tile.apply("MeanFilterEDX", parameters={"kernel_size": 3})
-print(tile.summary())
+#tile.apply("crop", parameters={"crop_idx": (slice(None),slice(None),slice(96,4096))})
+#tile.apply("binning", parameters={"dim": (1024,1024,250)})
+#tile.apply("MeanFilterEDX", parameters={"kernel_size": 3})
+#print(tile.summary())
 
 
 # visualize the haadf and a false-color of NPS maps and save
-nps = tile.FalseColor()
-f, ax = plt.subplots(1,2,figsize=(10,5))
-ax[0].imshow(1-tile.haadf,cmap='gray')
-ax[1].imshow(nps)
+#nps = tile.FalseColor()
+#f, ax = plt.subplots(1,2,figsize=(10,5))
+#ax[0].imshow(1-tile.haadf,cmap='gray')
+#ax[1].imshow(nps)
 #plt.show()
-make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
-plt.savefig(output_dir + "/haadf_NPS_after_binning_meanfiltering.png", dpi=300, transparent=True)
-plt.close(f)
+#make_dark_presentation(f,text_color='white', line_width=2.5, transparent=True)
+#plt.savefig(output_dir + "/haadf_NPS_after_binning_meanfiltering.png", dpi=300, transparent=True)
+#plt.close(f)
 
 
 ####### SOFIMA ALIGNMENT ########
@@ -136,7 +136,7 @@ del haadf_stack, haadf_stack_aligned
 gc.collect()
 
 
-## Create another EMD object
+## Create an EMD object
 tile_1 = EM_EDX(haadf, EDX, xray_energies)
 tile_1.apply("crop", parameters={"crop_idx": (slice(None), slice(None), slice(96, 4096))})
 tile_1.apply("binning", parameters={"dim": (2048, 2048, 250)})
@@ -152,7 +152,7 @@ import logging
 logging.getLogger("rsciio.emd").setLevel(logging.ERROR)
 
 save_path = output_dir + "/tmp/unaligned_hsi"
-tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames)
+tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames, data_type='float16')
 print("The unaligned HSI has been stored in: %s " % save_path)
 
 
