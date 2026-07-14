@@ -16,7 +16,7 @@ import gc
 
 
 # load data
-file_path =sys.argv[1] if len(sys.argv) > 1 else "/scratch/p276451/irodsToHabrok_test/2025-284_hairfollicle/0001 - 2025-284b 12000 x.emd"    # either the file path indicated or one from the CLI
+file_path =sys.argv[1] if len(sys.argv) > 1 else "/scratch/p276451/irodsToHabrok/2025-284_hairfollicle/0001 - 2025-284b 12000 x.emd"    # either the file path indicated or one from the CLI
 EDX, haadf_stack, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True, haadf_last_frame=False)
 
 
@@ -25,6 +25,13 @@ parent_folder_name = os.path.basename(os.path.dirname(os.path.abspath(file_path)
 output_dir = "/scratch/p276451/EM_EDX_output/" + parent_folder_name + "/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
+
+# create a directory in project folder
+projects_dir = "/projects/p276451/EM_EDX_output/" + parent_folder_name + "/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+if not os.path.exists(projects_dir):
+    os.makedirs(projects_dir)
+
+
 
 # Multiple steps
 # load show dimensions
@@ -151,7 +158,8 @@ gc.collect()
 import logging
 logging.getLogger("rsciio.emd").setLevel(logging.ERROR)
 
-save_path = output_dir + "/tmp/unaligned_hsi"
+
+save_path = projects_dir + "/tmp/unaligned_hsi"
 tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames, data_type='float16')
 print("The unaligned HSI has been stored in: %s " % save_path)
 
@@ -162,7 +170,8 @@ tile_1.apply("sofima_align",
                           "alignment": sof_obj, 
                           "data_type": "float32",
                           "save_aligned": False, 
-                          "hsi_stack_aligned_path": None})   
+                          "hsi_stack_aligned_path": None,
+                          "delete_after": True})   
 
 
 # Save the aligned EM-EDX tile
