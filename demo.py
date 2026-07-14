@@ -16,7 +16,7 @@ import gc
 
 
 # load data
-file_path =sys.argv[1] if len(sys.argv) > 1 else "/scratch/p276451/2025-284_hairfollicle/irodsToHabrok_test/0001 - 2025-284b 12000 x.emd"    # either the file path indicated or one from the CLI
+file_path =sys.argv[1] if len(sys.argv) > 1 else "/scratch/p276451/irodsToHabrok_test/2025-284_hairfollicle/0001 - 2025-284b 12000 x.emd"    # either the file path indicated or one from the CLI
 EDX, haadf_stack, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True, haadf_last_frame=False)
 
 
