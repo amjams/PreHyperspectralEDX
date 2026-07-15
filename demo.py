@@ -168,7 +168,7 @@ tile_1.apply("sofima_align",
                           "data_type": "float32",
                           "save_aligned": False, 
                           "hsi_stack_aligned_path": None,
-                          "delete_after": True})   
+                          "delete_after": False})   
 
 
 # Save the aligned EM-EDX tile

@@ -485,8 +485,8 @@ def store_unaligned_hsi_alt(emd_path, out_path, n_frames, data_type="float32"): 
     store[:, :, 0, :].write(edx_tmp.astype(np.float32)).result()
 
     # memory debug
-    rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
-    print(f"frame 01/{n_frames}: RSS = {rss_gb:.2f} GB", flush=True)
+    #rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+    #print(f"frame 01/{n_frames}: RSS = {rss_gb:.2f} GB", flush=True)
 
 
     # ---- Stream remaining frames ----
@@ -506,19 +506,15 @@ def store_unaligned_hsi_alt(emd_path, out_path, n_frames, data_type="float32"): 
         print(f"Loaded frame {k+1:02d}/{n_frames:02d}", end="\r")
 
         # memory debug
-        rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
-        print(f"frame {k+1:02d}/{n_frames:02d}: RSS = {rss_gb:.2f} GB", flush=True)
-
-    if delete_stack:
-        del store
-        shutil.rmtree(hsi_stack_loc_path)
+        #rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+        #print(f"frame {k+1:02d}/{n_frames:02d}: RSS = {rss_gb:.2f} GB", flush=True)
 
     
     print("\nAll frames stored.")
     return store
 
 
-def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type, delete_stack = False):   
+def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type):   
     
     """
     Apply a sofima alignment on a stack of HSIs
@@ -530,7 +526,6 @@ def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type, delete_stack = 
                         
     alignment: the alignment object
     data_type: of the input and output
-    delete_stack: delete the data in hsi_stack_loc_path after execution
 
     Returns: the sum of the aligned HSIs (h, w, b)
     """
@@ -562,6 +557,7 @@ def apply_alignment_3D(hsi_stack_loc_path, alignment, data_type, delete_stack = 
         img_stack_aligned_summed = img_stack_aligned.sum(axis=2)
         hsi_summed_aligned[:,:,k] = hsi_summed_aligned[:,:,k]+img_stack_aligned_summed
         print("Channel %03d out of %03d has been aligned" % (k+1,b))
+
 
     return hsi_summed_aligned
 
