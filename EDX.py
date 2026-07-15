@@ -435,7 +435,7 @@ class EM_EDX:
         
 
     def sofima_align(self, hsi_stack_path, alignment, data_type,   # check the save_aligned False option
-                    save_aligned=False, hsi_stack_aligned_path=None):   
+                    save_aligned=False, hsi_stack_aligned_path=None, delete_after= False):   
     
         """
         Apply a sofima alignment on a stack of HSIs
@@ -448,6 +448,7 @@ class EM_EDX:
         data_type: of the input and output
         save_aligned: Whether to save a tensorstore of the aligned (non-summed) stack of HSIs
         hsi_stack_aligned_path: Where to save the above
+        delete_after: for memory management, delete the hsi_stack after completion
     
         Returns: the sum of the aligned HSIs
         """
@@ -508,6 +509,11 @@ class EM_EDX:
             
             print("Channel %03d out of %03d has been aligned" % (k+1,b))
 
+        
+        if delete_after:
+            del store
+            shutil.rmtree(hsi_stack_path)
+
         # Save the aligned stack
         if save_aligned:
             if hsi_stack_aligned_path is None:
@@ -533,6 +539,7 @@ class EM_EDX:
             print(f"Saved aligned HSI stack to: {str(out_path)}")
 
         self.EDX = hsi_summed_aligned
+
         return self
 
      
