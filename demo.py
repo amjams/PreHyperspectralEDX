@@ -159,7 +159,7 @@ import logging
 logging.getLogger("rsciio.emd").setLevel(logging.ERROR)
 
 
-save_path = projects_dir + "/tmp/unaligned_hsi"
+save_path = projects_dir + "p276451/tmp/unaligned_hsi"
 tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames, data_type='float32')
 print("The unaligned HSI has been stored in: %s " % save_path)
 
