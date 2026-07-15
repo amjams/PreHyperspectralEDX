@@ -38,6 +38,5 @@ data/*/*.npz
 data/RamanMarko
 
 # Results
-preprocessing_basic/results
-Preprocessing_basic/tmp
-advanced_denoising/results
+demos/tmp
+demos/results
