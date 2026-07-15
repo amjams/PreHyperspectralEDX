@@ -26,11 +26,8 @@ output_dir = "/scratch/p276451/EM_EDX_output/" + parent_folder_name + "/" + os.p
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-# create a directory in project folder
-projects_dir = "/projects/p276451/EM_EDX_output/" + parent_folder_name + "/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-if not os.path.exists(projects_dir):
-    os.makedirs(projects_dir)
-
+# node-local scratch for transient TensorStore tmp data (falls back to output_dir outside SLURM)
+tmp_root = os.environ.get("TMPDIR", output_dir)
 
 
 # Multiple steps
@@ -69,11 +66,11 @@ sof_obj = get_alignment(haadf_stack,
                   patch_size = 100,
                   stride = 25,
                   pad_remove = 50,
-                  tmp_dir= output_dir, 
+                  tmp_dir= tmp_root,
                   align_to_zero = True)
 
 # Apply the alignment on the HAADF stack
-haadf_stack_aligned = apply_alignment_2D(haadf_stack, sof_obj, 'uint8', tmp_dir= output_dir)
+haadf_stack_aligned = apply_alignment_2D(haadf_stack, sof_obj, 'uint8', tmp_dir= tmp_root)
 
 
 # Ensure the stacks have matched dimensions
@@ -159,7 +156,7 @@ import logging
 logging.getLogger("rsciio.emd").setLevel(logging.ERROR)
 
 
-save_path = projects_dir + "p276451/tmp/unaligned_hsi"
+save_path = os.path.join(tmp_root, "unaligned_hsi")
 tmp = store_unaligned_hsi_alt(file_path, save_path, n_frames=num_frames, data_type='float32')
 print("The unaligned HSI has been stored in: %s " % save_path)
 
