@@ -11,8 +11,9 @@ torchmetrics
 humanfriendly
 distinctipy
 opencv-python
-bm3d
-bm4d
+#bm3d
+#bm4d
+
 #matlabengine==25.2.2  % needs special treatment for installing on the cluster: to be continued.
 hyperspy[all]
 transformers
@@ -24,6 +25,8 @@ pysptools
 seaborn
 ipympl
 nodejs-bin
+
+
 parampacmap
 phate
 sparse   # possibly needed at Habrok
