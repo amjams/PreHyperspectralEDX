@@ -8,6 +8,7 @@ import sys, os
 import numpy as np
 from sklearn.decomposition import PCA
 import sys
+import shutil
 import matplotlib.pyplot as plt
 from scipy.optimize import nnls 
 from matplotlib import cm
