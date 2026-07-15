@@ -22,14 +22,12 @@ import pandas as pd
 from utils import *
 #from utils_sofima import *
 import utils_sofima
-from pysptools.noise import MNF
 import tensorstore as ts
 import pathlib
 import gc
 import tracemalloc
 
 
-from advanced_denoising.pymultiscale import *
 try:      # for Habrok, where matlab hasn't been set up yet
     import matlab.engine
 except:

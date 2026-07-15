@@ -12,7 +12,6 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
 from utils import *
 os.environ["JAX_PLATFORM_NAME"] = "cpu"  # change this to your convenience
 
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -33,7 +32,7 @@ from concurrent import futures
 import time
 from scipy import interpolate
 from scipy.stats import pearsonr
-from EDX import *
+#from EDX import *
 import resource
 
 class sofima_alignment:
