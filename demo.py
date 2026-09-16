@@ -16,13 +16,14 @@ import gc
 
 
 # load data
-file_path =sys.argv[1] if len(sys.argv) > 1 else "/scratch/p276451/irodsToHabrok/2025-284_hairfollicle/0001 - 2025-284b 12000 x.emd"    # either the file path indicated or one from the CLI
+file_path =sys.argv[1] if len(sys.argv) > 1 else "/Volumes/Microscopy4/Stains_EMDs/0003 - 20260429 2219 12000 x 26-066.emd"    # either the file path indicated or one from the CLI
 EDX, haadf_stack, xray_energies = load_EDX(file_path, first_frame=0, last_frame=20,sum_frames=True, haadf_last_frame=False)
 
 
 # create an out dictory with the name of the EMD file and the current date and time
 parent_folder_name = os.path.basename(os.path.dirname(os.path.abspath(file_path)))
-output_dir = "/scratch/p276451/EM_EDX_output/" + parent_folder_name + "/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+parent_out_path =  "/scratch/p276451/EM_EDX_output/" if len(sys.argv) > 1 else "/Volumes/Microscopy4/Stains_EMDs/output"
+output_dir = parent_out_path + "/" + parent_folder_name + "/" + os.path.basename(file_path).split('.')[0] + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
